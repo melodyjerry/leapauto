@@ -239,6 +239,21 @@ class VehicleHealthDiagnosticsTest {
     }
 
     @Test
+    fun `open sunroof flags body system and provides sunroof close fix`() {
+        val status = createBaseStatus().copy(
+            sunroofAvailable = true,
+            sunroofOpen = true,
+            sunroofOpeningPercent = 100
+        )
+        val report = VehicleHealthDiagnostics.evaluate(status)
+
+        val sunroofIssue = report.issues.firstOrNull { it.fixCommand == "sunroofClose" }
+        assertNotNull("天窗未关应提供关闭快捷修复", sunroofIssue)
+        assertEquals("关闭天窗", sunroofIssue?.fixLabel)
+        assertEquals(HealthCheckLevel.WARNING, sunroofIssue?.level)
+    }
+
+    @Test
     fun `locked vehicle with active climate comfort and fridge provides quick fixes`() {
         val status = createBaseStatus().copy(
             locked = true,

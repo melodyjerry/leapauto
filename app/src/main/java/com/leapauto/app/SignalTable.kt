@@ -106,6 +106,7 @@ object SignalTable {
         "3636" to "sentryMode",
         "49" to "leftMirrorHeating",
         "50" to "rightMirrorHeating",
+        "1718" to "sunroofOpening",
         "1724" to "roofOpening",
         // 车载冰箱（C16 实车核验）
         "10707" to "fridgeTargetTemp",

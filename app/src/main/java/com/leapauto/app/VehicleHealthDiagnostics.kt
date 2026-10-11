@@ -393,6 +393,29 @@ object VehicleHealthDiagnostics {
             )
         }
 
+        // 3.4.1 电动车顶天窗
+        if (status.sunroofAvailable) {
+            if (status.sunroofOpen) {
+                bodyItems.add(
+                    HealthCheckItem(
+                        title = "电动车顶天窗检测",
+                        detail = "车顶天窗处于开启状态 (${status.sunroofOpeningPercent ?: 100}%)，离车建议闭合以防雨淋",
+                        level = HealthCheckLevel.WARNING,
+                        fixCommand = "sunroofClose",
+                        fixLabel = "关闭天窗"
+                    )
+                )
+            } else {
+                bodyItems.add(
+                    HealthCheckItem(
+                        title = "电动车顶天窗密封",
+                        detail = "车顶天窗已完全关闭锁止",
+                        level = HealthCheckLevel.GOOD
+                    )
+                )
+            }
+        }
+
         // 3.5 哨兵与防盗安防
         if (status.sentryMode == true) {
             bodyItems.add(

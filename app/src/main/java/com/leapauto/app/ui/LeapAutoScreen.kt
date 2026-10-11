@@ -68,6 +68,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -108,6 +109,7 @@ import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
@@ -230,6 +232,8 @@ import com.leapauto.app.VehicleDrivingSafetyPolicy
 import com.leapauto.app.QuickCommandExecutionPolicy
 import com.leapauto.app.QuickCommandOrderPolicy
 import com.leapauto.app.SunshadeMenuPolicy
+import com.leapauto.app.SunroofMenuPolicy
+import com.leapauto.app.VehicleOtaState
 import com.leapauto.app.R
 import com.leapauto.app.SUPPORTED_VEHICLE_MODELS
 import com.leapauto.app.SentryModeControlPolicy
@@ -361,6 +365,11 @@ fun LeapAutoScreen(
     currentVersion: String,
     currentReleaseNotes: String,
     versionUpdateState: VersionUpdateState,
+    vehicleOtaState: VehicleOtaState = VehicleOtaState.Idle,
+    onCheckVehicleOta: () -> Unit = {},
+    onDownloadVehicleOta: (String) -> Unit = {},
+    onInstallVehicleOta: (String, String) -> Unit = { _, _ -> },
+    onScheduleVehicleOta: (String, String, String) -> Unit = { _, _, _ -> },
     handledUpdateVersion: String? = null,
     showAuthorSupportDialog: Boolean = false,
     showSessionExpiredDialog: Boolean = false,
@@ -988,6 +997,11 @@ fun LeapAutoScreen(
                                 currentVersion = currentVersion,
                                 currentReleaseNotes = currentReleaseNotes,
                                 versionUpdateState = versionUpdateState,
+                                vehicleOtaState = vehicleOtaState,
+                                onCheckVehicleOta = onCheckVehicleOta,
+                                onDownloadVehicleOta = onDownloadVehicleOta,
+                                onInstallVehicleOta = onInstallVehicleOta,
+                                onScheduleVehicleOta = onScheduleVehicleOta,
                                 onCheckForUpdate = onCheckForUpdate,
                                 onOpenUpdate = onOpenUpdate,
                                 downloadUpdateProgress = downloadUpdateProgress,
@@ -1030,268 +1044,246 @@ private fun LoginContent(
     val canSendSms = smsCountdownSeconds == 0 && phone.length == 11 && !busy
     var showTokenImportDialog by remember { mutableStateOf(false) }
 
-    Column(
-        Modifier
+    Box(
+        modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+            .imePadding(),
+        contentAlignment = Alignment.Center
     ) {
-        Spacer(Modifier.height(52.dp))
-
-        var titleTapCount by remember { mutableIntStateOf(0) }
-        var lastTapEpochMs by remember { mutableLongStateOf(0L) }
-
-        Text(
-            text = "零跑智控",
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier
-                .clip(RoundedCornerShape(8.dp))
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null
-                ) {
-                    val now = System.currentTimeMillis()
-                    if (now - lastTapEpochMs > 1500L) {
-                        titleTapCount = 1
-                    } else {
-                        titleTapCount += 1
-                        if (titleTapCount >= 5) {
-                            titleTapCount = 0
-                            showTokenImportDialog = true
-                        }
-                    }
-                    lastTapEpochMs = now
-                }
-        )
-
-        Spacer(Modifier.height(6.dp))
-
-        Text(
-            text = "连接你的每一次出发",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-
-        Spacer(Modifier.height(32.dp))
-
-        // 登录卡片
-        val loginAura = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f)
-        Surface(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .frostedGlassCard(
-                    shape = RoundedCornerShape(22.dp),
-                    auraColor = loginAura,
-                    auraCenter = Offset(0.5f, 0.2f)
-                ),
-            shape = RoundedCornerShape(22.dp),
-            color = Color.Transparent,
-            border = glassCardBorder(),
-            shadowElevation = 0.dp
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 24.dp, vertical = 20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
         ) {
-            Column(
-                modifier = Modifier.padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                Text(
-                    text = "账号验证登录",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
+            var titleTapCount by remember { mutableIntStateOf(0) }
+            var lastTapEpochMs by remember { mutableLongStateOf(0L) }
 
-                // 手机号输入框
-                OutlinedTextField(
-                    value = phone,
-                    onValueChange = { onPhoneChange(it.filter(Char::isDigit).take(11)) },
-                    label = { Text("手机号") },
-                    placeholder = { Text("零跑 App 注册手机号") },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
-                    shape = RoundedCornerShape(14.dp),
-                    trailingIcon = {
-                        if (phone.isNotEmpty()) {
-                            IconButton(onClick = { onPhoneChange("") }) {
-                                Text(
-                                    "✕",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                // 验证码输入框（行内尾部整合“获取验证码”按钮）
-                OutlinedTextField(
-                    value = code,
-                    onValueChange = { onCodeChange(it.filter(Char::isDigit).take(6)) },
-                    label = { Text("短信验证码") },
-                    placeholder = { Text("6 位验证码") },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    shape = RoundedCornerShape(14.dp),
-                    trailingIcon = {
-                        TextButton(
-                            onClick = {
-                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                onSendSms()
-                            },
-                            enabled = canSendSms,
-                            colors = ButtonDefaults.textButtonColors(
-                                contentColor = MaterialTheme.colorScheme.primary,
-                                disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.40f)
-                            ),
-                            modifier = Modifier.padding(end = 4.dp)
-                        ) {
-                            Text(
-                                text = if (smsCountdownSeconds == 0) "获取验证码" else "${smsCountdownSeconds}s",
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Spacer(Modifier.height(4.dp))
-
-                // 登录大按钮
-                Button(
-                    onClick = {
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        onLogin()
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(50.dp),
-                    shape = RoundedCornerShape(14.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primary,
-                        contentColor = Color.White,
-                        disabledContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                        disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.40f)
+            // 1. 悬浮微晶 3D 品牌晶核图标
+            Surface(
+                modifier = Modifier
+                    .size(72.dp)
+                    .frostedGlassCard(
+                        shape = RoundedCornerShape(22.dp),
+                        auraColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.20f),
+                        auraCenter = Offset(0.5f, 0.5f)
                     ),
-                    enabled = canLogin
-                ) {
-                    if (busy) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(20.dp),
-                            strokeWidth = 2.dp,
-                            color = Color.White
+                shape = RoundedCornerShape(22.dp),
+                color = Color.Transparent,
+                border = glassCardBorder(),
+                shadowElevation = 0.dp
+            ) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Box(
+                        modifier = Modifier
+                            .size(56.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                    ) {
+                        Image(
+                            painter = painterResource(R.drawable.ic_launcher_background),
+                            contentDescription = null,
+                            modifier = Modifier.fillMaxSize()
                         )
-                    } else {
-                        Text(
-                            text = "登录",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold
+                        Image(
+                            painter = painterResource(R.drawable.ic_launcher_foreground),
+                            contentDescription = "零跑智控",
+                            modifier = Modifier.fillMaxSize()
                         )
                     }
                 }
             }
-        }
 
-        if (showTokenImportDialog) {
-            var tokenInput by remember { mutableStateOf("") }
-            var phoneInput by remember { mutableStateOf(phone) }
-            AlertDialog(
-                onDismissRequest = { showTokenImportDialog = false },
-                modifier = solidDialogModifier(shape = RoundedCornerShape(24.dp)),
-                containerColor = MaterialTheme.colorScheme.surface,
-                tonalElevation = 0.dp,
-                shape = RoundedCornerShape(24.dp),
-                title = {
-                    Text(
-                        "Token 凭据导入",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                },
-                text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text(
-                            text = "请确认关联手机号（用于旧链路远控续期与签名），并粘贴完整登录响应 JSON：",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        OutlinedTextField(
-                            value = phoneInput,
-                            onValueChange = { phoneInput = it.filter(Char::isDigit).take(11) },
-                            label = { Text("关联手机号 (必填，用于远控续期)") },
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
-                            shape = RoundedCornerShape(10.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        OutlinedTextField(
-                            value = tokenInput,
-                            onValueChange = { tokenInput = it },
-                            label = { Text("凭据 JSON 内容") },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(140.dp),
-                            placeholder = { Text("粘贴包含 accountId、token、refreshToken 的完整 JSON…") },
-                            textStyle = MaterialTheme.typography.bodySmall,
-                            shape = RoundedCornerShape(10.dp)
-                        )
+            Spacer(Modifier.height(18.dp))
+
+            // 2. 标题与标语（保留5连击唤起开发者 Token 导入弹窗）
+            Text(
+                text = "零跑智控",
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) {
+                        val now = System.currentTimeMillis()
+                        if (now - lastTapEpochMs > 1500L) {
+                            titleTapCount = 1
+                        } else {
+                            titleTapCount += 1
+                            if (titleTapCount >= 5) {
+                                titleTapCount = 0
+                                showTokenImportDialog = true
+                            }
+                        }
+                        lastTapEpochMs = now
                     }
-                },
-                confirmButton = {
-                    Button(
-                        onClick = {
-                            if (tokenInput.isNotBlank()) {
-                                showTokenImportDialog = false
-                                onLoginWithRawAuth(tokenInput, phoneInput)
+            )
+
+            Spacer(Modifier.height(4.dp))
+
+            Text(
+                text = "智能座舱车联控制中心",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            Spacer(Modifier.height(28.dp))
+
+            // 3. 极简微晶登录卡片
+            val loginAura = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .frostedGlassCard(
+                        shape = RoundedCornerShape(24.dp),
+                        auraColor = loginAura,
+                        auraCenter = Offset(0.5f, 0.15f)
+                    ),
+                shape = RoundedCornerShape(24.dp),
+                color = Color.Transparent,
+                border = glassCardBorder(),
+                shadowElevation = 0.dp
+            ) {
+                Column(
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 24.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    // 手机号输入框（左侧内嵌 +86 微晶胶囊标，右侧一键清空）
+                    OutlinedTextField(
+                        value = phone,
+                        onValueChange = { onPhoneChange(it.filter(Char::isDigit).take(11)) },
+                        placeholder = { Text("请输入 11 位手机号") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                        shape = RoundedCornerShape(16.dp),
+                        leadingIcon = {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(start = 14.dp, end = 8.dp)
+                            ) {
+                                Text(
+                                    text = "+86",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .width(1.dp)
+                                        .height(16.dp)
+                                        .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.60f))
+                                )
                             }
                         },
-                        shape = RoundedCornerShape(12.dp),
-                        enabled = tokenInput.isNotBlank() && phoneInput.length == 11 && !busy
+                        trailingIcon = {
+                            if (phone.isNotEmpty()) {
+                                IconButton(onClick = { onPhoneChange("") }) {
+                                    Text(
+                                        "✕",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        },
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                            unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.60f),
+                            focusedContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.40f),
+                            unfocusedContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.25f)
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    // 验证码输入框（行内集成圆润胶囊式“获取验证码”按钮）
+                    OutlinedTextField(
+                        value = code,
+                        onValueChange = { onCodeChange(it.filter(Char::isDigit).take(6)) },
+                        placeholder = { Text("请输入 6 位短信验证码") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        shape = RoundedCornerShape(16.dp),
+                        trailingIcon = {
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = if (canSendSms) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                                       else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.30f),
+                                border = BorderStroke(
+                                    0.8.dp,
+                                    if (canSendSms) MaterialTheme.colorScheme.primary.copy(alpha = 0.40f)
+                                    else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.40f)
+                                ),
+                                modifier = Modifier.padding(end = 6.dp)
+                            ) {
+                                TextButton(
+                                    onClick = {
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        onSendSms()
+                                    },
+                                    enabled = canSendSms,
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                    colors = ButtonDefaults.textButtonColors(
+                                        contentColor = MaterialTheme.colorScheme.primary,
+                                        disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.50f)
+                                    )
+                                ) {
+                                    Text(
+                                        text = if (smsCountdownSeconds == 0) "获取验证码" else "${smsCountdownSeconds}s",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                }
+                            }
+                        },
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                            unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.60f),
+                            focusedContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.40f),
+                            unfocusedContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.25f)
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Spacer(Modifier.height(4.dp))
+
+                    // 登录大按钮（52dp 高度，微晶高亮）
+                    Button(
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            onLogin()
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(52.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            contentColor = Color.White,
+                            disabledContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                            disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.40f)
+                        ),
+                        enabled = canLogin
                     ) {
-                        Text("导入并登录")
-                    }
-                },
-                dismissButton = {
-                    TextButton(
-                        onClick = { showTokenImportDialog = false },
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Text("取消")
+                        if (busy) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.dp,
+                                color = Color.White
+                            )
+                        } else {
+                            Text(
+                                text = "登 录",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     }
                 }
-            )
-        }
-
-        Spacer(Modifier.height(28.dp))
-
-        // 底部安全凭证提示胶囊
-        Surface(
-            modifier = Modifier.frostedGlassCard(shape = RoundedCornerShape(20.dp)),
-            shape = RoundedCornerShape(20.dp),
-            color = Color.Transparent,
-            border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
-            shadowElevation = 0.dp
-        ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_phosphor_lock),
-                    contentDescription = "安全存储",
-                    tint = MaterialTheme.statusGood,
-                    modifier = Modifier.size(14.dp)
-                )
-                Text(
-                    text = "直连零跑官方车联服务 · 凭据本地硬件级加密存储",
-                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
             }
         }
     }
@@ -1677,6 +1669,11 @@ private fun MyContent(
     currentVersion: String,
     currentReleaseNotes: String,
     versionUpdateState: VersionUpdateState,
+    vehicleOtaState: VehicleOtaState = VehicleOtaState.Idle,
+    onCheckVehicleOta: () -> Unit = {},
+    onDownloadVehicleOta: (String) -> Unit = {},
+    onInstallVehicleOta: (String, String) -> Unit = { _, _ -> },
+    onScheduleVehicleOta: (String, String, String) -> Unit = { _, _, _ -> },
     onCheckForUpdate: () -> Unit,
     onOpenUpdate: () -> Unit,
     downloadUpdateProgress: Int? = null,
@@ -1850,6 +1847,17 @@ private fun MyContent(
                 )
             }
         }
+
+        // 5.9 车机系统 OTA
+        val isSubAccount = availableVehicles.firstOrNull { it.vin == vehicleVin }?.isSharedAccount == true
+        VehicleOtaCard(
+            state = vehicleOtaState,
+            isSubAccount = isSubAccount,
+            onCheck = onCheckVehicleOta,
+            onDownload = onDownloadVehicleOta,
+            onInstall = onInstallVehicleOta,
+            onSchedule = onScheduleVehicleOta
+        )
 
         // 6. 当前版本信息与检查更新
         VersionUpdateCard(
@@ -2044,6 +2052,12 @@ private fun PowerTypeConfigCard(
     currentPowerType: SessionStore.VehiclePowerType,
     onPowerTypeChange: (SessionStore.VehiclePowerType) -> Unit
 ) {
+    val options = listOf(
+        SessionStore.VehiclePowerType.PURE_ELECTRIC to "纯电",
+        SessionStore.VehiclePowerType.RANGE_EXTENDER to "增程"
+    )
+    val currentLabel = if (currentPowerType == SessionStore.VehiclePowerType.RANGE_EXTENDER) "增程" else "纯电"
+
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -2054,47 +2068,60 @@ private fun PowerTypeConfigCard(
         border = glassCardBorder(),
         shadowElevation = 0.dp
     ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+        Column(
+            Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(
+                        text = "动力模式",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        text = if (currentPowerType == SessionStore.VehiclePowerType.RANGE_EXTENDER) "当前为：增程模式" else "当前为：纯电模式",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
                 Text(
-                    text = "动力模式",
-                    style = MaterialTheme.typography.titleMedium,
+                    text = currentLabel,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary,
                     fontWeight = FontWeight.SemiBold
-                )
-                Text(
-                    text = if (currentPowerType == SessionStore.VehiclePowerType.RANGE_EXTENDER) "当前为：增程模式" else "当前为：纯电模式",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
 
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                val isEv = currentPowerType == SessionStore.VehiclePowerType.PURE_ELECTRIC
-                val isReev = currentPowerType == SessionStore.VehiclePowerType.RANGE_EXTENDER
-
-                FilterChip(
-                    selected = isEv,
-                    onClick = { onPowerTypeChange(SessionStore.VehiclePowerType.PURE_ELECTRIC) },
-                    label = { Text("纯电", fontWeight = FontWeight.SemiBold) },
-                    colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
-                        selectedLabelColor = MaterialTheme.colorScheme.primary
+            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                options.forEachIndexed { index, option ->
+                    val isSelected = currentPowerType == option.first
+                    SegmentedButton(
+                        shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size),
+                        onClick = { onPowerTypeChange(option.first) },
+                        selected = isSelected,
+                        icon = {},
+                        colors = SegmentedButtonDefaults.colors(
+                            activeContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                            activeContentColor = MaterialTheme.colorScheme.primary,
+                            activeBorderColor = MaterialTheme.colorScheme.primary,
+                            inactiveContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.50f),
+                            inactiveContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            inactiveBorderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.60f)
+                        ),
+                        label = {
+                            Text(
+                                text = option.second,
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                            )
+                        }
                     )
-                )
-
-                FilterChip(
-                    selected = isReev,
-                    onClick = { onPowerTypeChange(SessionStore.VehiclePowerType.RANGE_EXTENDER) },
-                    label = { Text("增程", fontWeight = FontWeight.SemiBold) },
-                    colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
-                        selectedLabelColor = MaterialTheme.colorScheme.primary
-                    )
-                )
+                }
             }
         }
     }
@@ -3265,6 +3292,12 @@ private fun WidgetBackgroundStyleCard(
     style: Int,
     onStyleChange: (Int) -> Unit
 ) {
+    val options = listOf(
+        SessionStore.WIDGET_BG_STYLE_MICROCRYSTAL to "经典微晶",
+        SessionStore.WIDGET_BG_STYLE_LANDSCAPE to "官方山河"
+    )
+    val currentLabel = if (style == SessionStore.WIDGET_BG_STYLE_MICROCRYSTAL) "经典微晶" else "官方山河"
+
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -3275,47 +3308,60 @@ private fun WidgetBackgroundStyleCard(
         border = glassCardBorder(),
         shadowElevation = 0.dp
     ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+        Column(
+            Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(
+                        text = "小组件背景风格",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        text = if (style == SessionStore.WIDGET_BG_STYLE_MICROCRYSTAL) "当前为：经典微晶毛玻璃" else "当前为：官方山河天幕画卷",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
                 Text(
-                    text = "小组件背景风格",
-                    style = MaterialTheme.typography.titleMedium,
+                    text = currentLabel,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary,
                     fontWeight = FontWeight.SemiBold
-                )
-                Text(
-                    text = if (style == SessionStore.WIDGET_BG_STYLE_MICROCRYSTAL) "当前为：经典微晶毛玻璃" else "当前为：官方山河天幕画卷",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
 
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                val isMicrocrystal = style == SessionStore.WIDGET_BG_STYLE_MICROCRYSTAL
-                val isLandscape = style == SessionStore.WIDGET_BG_STYLE_LANDSCAPE
-
-                FilterChip(
-                    selected = isMicrocrystal,
-                    onClick = { onStyleChange(SessionStore.WIDGET_BG_STYLE_MICROCRYSTAL) },
-                    label = { Text("经典微晶", fontWeight = FontWeight.SemiBold) },
-                    colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
-                        selectedLabelColor = MaterialTheme.colorScheme.primary
+            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                options.forEachIndexed { index, option ->
+                    val isSelected = style == option.first
+                    SegmentedButton(
+                        shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size),
+                        onClick = { onStyleChange(option.first) },
+                        selected = isSelected,
+                        icon = {},
+                        colors = SegmentedButtonDefaults.colors(
+                            activeContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                            activeContentColor = MaterialTheme.colorScheme.primary,
+                            activeBorderColor = MaterialTheme.colorScheme.primary,
+                            inactiveContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.50f),
+                            inactiveContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            inactiveBorderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.60f)
+                        ),
+                        label = {
+                            Text(
+                                text = option.second,
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                            )
+                        }
                     )
-                )
-
-                FilterChip(
-                    selected = isLandscape,
-                    onClick = { onStyleChange(SessionStore.WIDGET_BG_STYLE_LANDSCAPE) },
-                    label = { Text("官方山河", fontWeight = FontWeight.SemiBold) },
-                    colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
-                        selectedLabelColor = MaterialTheme.colorScheme.primary
-                    )
-                )
+                }
             }
         }
     }
@@ -3363,24 +3409,33 @@ private fun WidgetOpacityCard(opacity: Int, onOpacityChange: (Int) -> Unit) {
                 Text(
                     options.firstOrNull { it.first == opacity }?.second ?: "不透明",
                     style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.SemiBold
                 )
             }
             SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
                 options.forEachIndexed { index, option ->
+                    val isSelected = opacity == option.first
                     SegmentedButton(
                         shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size),
                         onClick = { onOpacityChange(option.first) },
-                        selected = opacity == option.first,
+                        selected = isSelected,
+                        icon = {},
                         colors = SegmentedButtonDefaults.colors(
-                            activeContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                            activeContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                            activeContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                            activeContentColor = MaterialTheme.colorScheme.primary,
                             activeBorderColor = MaterialTheme.colorScheme.primary,
-                            inactiveContainerColor = MaterialTheme.colorScheme.surface,
+                            inactiveContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.50f),
                             inactiveContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            inactiveBorderColor = MaterialTheme.colorScheme.outlineVariant
+                            inactiveBorderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.60f)
                         ),
-                        label = { Text(option.second, style = MaterialTheme.typography.labelSmall) }
+                        label = {
+                            Text(
+                                text = option.second,
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                            )
+                        }
                     )
                 }
             }
@@ -5419,6 +5474,7 @@ fun WindowStatusDialog(
         leftRearPercent = status?.leftRearWindowPercent,
         rightRearPercent = status?.rightRearWindowPercent,
         roofOpeningPercent = status?.roofOpeningPercent,
+        sunroofOpeningPercent = status?.sunroofOpeningPercent,
         onCloseAllWindows = onControl?.let { ctrl -> { ctrl("windowClose") } },
         onVentWindows = onControl?.let { ctrl -> { ctrl("windowVent") } },
         onDismiss = onDismiss
@@ -5439,6 +5495,7 @@ fun WindowStatusDialog(
         leftRearPercent = null,
         rightRearPercent = null,
         roofOpeningPercent = null,
+        sunroofOpeningPercent = null,
         onCloseAllWindows = null,
         onVentWindows = null,
         onDismiss = onDismiss
@@ -5454,6 +5511,7 @@ fun WindowStatusDialog(
     leftRearPercent: Int? = null,
     rightRearPercent: Int? = null,
     roofOpeningPercent: Int? = null,
+    sunroofOpeningPercent: Int? = null,
     onCloseAllWindows: (() -> Unit)? = null,
     onVentWindows: (() -> Unit)? = null,
     onDismiss: () -> Unit
@@ -5584,7 +5642,54 @@ fun WindowStatusDialog(
                         }
                     }
 
-                    // 全景天窗状态条（如果车型返回了天窗信号）
+                    // 电动车顶天窗状态条（如果车型具备电动天窗机构）
+                    if (sunroofOpeningPercent != null) {
+                        val sfOpen = sunroofOpeningPercent > 0
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                            border = BorderStroke(
+                                0.8.dp,
+                                if (sfOpen) MaterialTheme.colorScheme.error.copy(alpha = 0.40f)
+                                else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Icon(
+                                        painter = painterResource(if (sfOpen) R.drawable.ic_sunroof_open else R.drawable.ic_sunroof_close),
+                                        contentDescription = null,
+                                        tint = if (sfOpen) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Text(
+                                        text = "车顶天窗",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontWeight = FontWeight.Medium,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+                                Text(
+                                    text = if (sfOpen) "天窗开启 $sunroofOpeningPercent%" else "天窗已关闭",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = if (sfOpen) MaterialTheme.colorScheme.error else MaterialTheme.statusGood
+                                )
+                            }
+                        }
+                    }
+
+                    // 全景天窗/遮阳帘状态条（如果车型返回了天窗/遮阳帘信号）
                     if (roofOpeningPercent != null) {
                         val roofOpen = roofOpeningPercent > 0
                         Surface(
@@ -5615,7 +5720,7 @@ fun WindowStatusDialog(
                                         modifier = Modifier.size(16.dp)
                                     )
                                     Text(
-                                        text = "全景天窗",
+                                        text = if (sunroofOpeningPercent != null) "天幕遮阳帘" else "全景天窗",
                                         style = MaterialTheme.typography.bodySmall,
                                         fontWeight = FontWeight.Medium,
                                         color = MaterialTheme.colorScheme.onSurface
@@ -5816,20 +5921,30 @@ private fun QuickVehicleActions(
     var editing by rememberSaveable { mutableStateOf(false) }
     var windowMenuExpanded by rememberSaveable { mutableStateOf(false) }
     var sunshadeMenuExpanded by rememberSaveable { mutableStateOf(false) }
+    var sunroofMenuExpanded by rememberSaveable { mutableStateOf(false) }
     var windowButtonTopLeft by remember { mutableStateOf(Offset.Zero) }
     var windowButtonWidth by remember { mutableStateOf(0f) }
     var windowButtonHeight by remember { mutableStateOf(0f) }
     var sunshadeButtonTopLeft by remember { mutableStateOf(Offset.Zero) }
     var sunshadeButtonWidth by remember { mutableStateOf(0f) }
     var sunshadeButtonHeight by remember { mutableStateOf(0f) }
+    var sunroofButtonTopLeft by remember { mutableStateOf(Offset.Zero) }
+    var sunroofButtonWidth by remember { mutableStateOf(0f) }
+    var sunroofButtonHeight by remember { mutableStateOf(0f) }
     val trunkState = status?.trunkState ?: TrunkState.UNKNOWN
     val isDrivingGear = VehicleDrivingSafetyPolicy.isDrivingGear(status?.gearStatus)
     val commandsPerPage = 5
-    val availableCommands = remember(vehicleVin, vehicleModel, status?.sentryMode) {
+    val availableCommands = remember(vehicleVin, vehicleModel, status?.sentryMode, status?.sunroofAvailable) {
         val supportsWindowGroup = !vehicleModel.contains("T03", ignoreCase = true)
         val supportsFrunk = VehicleQuickControlCapabilities.supportsFrunk(vehicleModel)
+        val supportsSunroof = status?.sunroofAvailable == true
         val windowGroup = if (supportsWindowGroup) {
             listOf(Cmd("windowGroup", "车窗", R.drawable.ic_phosphor_wind))
+        } else {
+            emptyList()
+        }
+        val sunroofCommands = if (supportsSunroof) {
+            listOf(Cmd("sunroofGroup", "天窗", R.drawable.ic_sunroof))
         } else {
             emptyList()
         }
@@ -5846,6 +5961,7 @@ private fun QuickVehicleActions(
             Cmd("unlock", "解锁", R.drawable.ic_phosphor_lock_open),
             Cmd("lock", "上锁", R.drawable.ic_phosphor_lock),
             *windowGroup.toTypedArray(),
+            *sunroofCommands.toTypedArray(),
             Cmd("trunk", "开后备箱", R.drawable.ic_phosphor_trunk_open),
             *frunkCommands.toTypedArray(),
             *extraCommands.toTypedArray(),
@@ -6010,6 +6126,7 @@ private fun QuickVehicleActions(
                                         handleQuickActionClick {
                                             if (!editing) {
                                                 sunshadeMenuExpanded = false
+                                                sunroofMenuExpanded = false
                                                 windowMenuExpanded = !windowMenuExpanded
                                             }
                                         }
@@ -6028,6 +6145,39 @@ private fun QuickVehicleActions(
                                     WindowBadge(modifier = Modifier.align(Alignment.TopEnd))
                                 }
                             }
+                        } else if (command.name == "sunroofGroup") {
+                            val sunroofOpen = status?.sunroofOpen == true
+                            val sunroofLabel = if (sunroofOpen) "天窗已开" else "天窗"
+                            Box(modifier = Modifier.weight(1f)) {
+                                QuickVehicleButton(
+                                    label = sunroofLabel,
+                                    iconRes = R.drawable.ic_sunroof,
+                                    warning = sunroofOpen,
+                                    inProgress = cmdInProgress,
+                                    isSensitive = false,
+                                    onClick = {
+                                        handleQuickActionClick {
+                                            if (!editing) {
+                                                windowMenuExpanded = false
+                                                sunshadeMenuExpanded = false
+                                                sunroofMenuExpanded = !sunroofMenuExpanded
+                                            }
+                                        }
+                                    },
+                                    iconTint = if (sunroofOpen) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+                                    labelTint = if (sunroofOpen) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .onGloballyPositioned { coordinates ->
+                                            sunroofButtonTopLeft = coordinates.positionInWindow()
+                                            sunroofButtonWidth = coordinates.size.width.toFloat()
+                                            sunroofButtonHeight = coordinates.size.height.toFloat()
+                                        }
+                                )
+                                if (sunroofOpen) {
+                                    WindowBadge(modifier = Modifier.align(Alignment.TopEnd))
+                                }
+                            }
                         } else if (command.name == "sunshadeGroup") {
                             QuickVehicleButton(
                                 label = label,
@@ -6038,6 +6188,7 @@ private fun QuickVehicleActions(
                                     handleQuickActionClick {
                                         if (!editing) {
                                             windowMenuExpanded = false
+                                            sunroofMenuExpanded = false
                                             sunshadeMenuExpanded = !sunshadeMenuExpanded
                                         }
                                     }
@@ -6321,6 +6472,67 @@ private fun QuickVehicleActions(
                                 onClick = {
                                     handleQuickActionClick {
                                         sunshadeMenuExpanded = false
+                                        onControl(item.command)
+                                    }
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        if (sunroofMenuExpanded) {
+            Popup(
+                popupPositionProvider = object : PopupPositionProvider {
+                    override fun calculatePosition(
+                        anchorBounds: IntRect,
+                        windowSize: IntSize,
+                        layoutDirection: LayoutDirection,
+                        popupContentSize: IntSize
+                    ): IntOffset {
+                        val menuWidth = popupContentSize.width
+                        val menuHeight = popupContentSize.height
+                        val buttonCenterX = (sunroofButtonTopLeft.x + sunroofButtonWidth / 2).roundToInt()
+                        val desiredX = buttonCenterX - menuWidth / 2
+                        val clampedX = desiredX.coerceIn(8, windowSize.width - menuWidth - 8)
+                        val spaceAbove = sunroofButtonTopLeft.y.roundToInt()
+                        val y = if (menuHeight <= spaceAbove) {
+                            spaceAbove - menuHeight - 8
+                        } else {
+                            spaceAbove + sunroofButtonHeight.roundToInt() + 8
+                        }
+                        return IntOffset(clampedX, y)
+                    }
+                },
+                onDismissRequest = { sunroofMenuExpanded = false },
+                properties = PopupProperties(focusable = true)
+            ) {
+                Surface(
+                    modifier = Modifier.widthIn(min = 120.dp, max = 160.dp),
+                    shape = RoundedCornerShape(18.dp),
+                    tonalElevation = 4.dp,
+                    shadowElevation = 10.dp,
+                    color = MaterialTheme.colorScheme.surface,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.50f))
+                ) {
+                    Column {
+                        for ((index, item) in SunroofMenuPolicy.items.withIndex()) {
+                            if (index > 0) {
+                                Box(
+                                    modifier = Modifier
+                                        .padding(horizontal = 14.dp)
+                                        .fillMaxWidth()
+                                        .height(1.dp)
+                                        .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f))
+                                )
+                            }
+                            QuickMenuAction(
+                                label = item.label,
+                                iconRes = item.iconRes,
+                                onClick = {
+                                    handleQuickActionClick {
+                                        sunroofMenuExpanded = false
                                         onControl(item.command)
                                     }
                                 }

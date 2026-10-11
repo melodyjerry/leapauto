@@ -413,6 +413,7 @@
 | | `1694` | `rightFrontWindowStatus`| Int | 右前车窗状态 |
 | | `1695` | `leftRearWindowStatus` | Int | 左后车窗状态 |
 | | `1696` | `rightRearWindowStatus` | Int | 右后车窗状态 |
+| | `1718` | `sunroofOpening` | Int (0..10) | 车顶玻璃天窗开度（0全关，10全开，24款C11等车型） |
 | | `1724` | `roofOpening` | Int (0..100) | 全景电动天幕/遮阳帘开度百分比 |
 | **座舱空调** | `1938` | `acSwitch` | Int | 空调总电源状态：`0`=关闭，`1`=运行中 |
 | | `2183` | `acSetting` | Double (℃) | 主驾设定目标温度（如 `24.0`） |
@@ -493,6 +494,8 @@
 | `windowClose` | `230` | `{"value":"0"}` | 车窗一键全关升顶 | 4位操作密码 |
 | `sunshadeOpen` | `240` | `{"value":"10"}` | 全景电动天幕遮阳帘全开 | 4位操作密码 |
 | `sunshadeClose` | `240` | `{"value":"0"}` | 全景电动天幕遮阳帘全关 | 4位操作密码 |
+| `sunroofOpen` | `300` | `{"value":"1"}` | 电动车顶玻璃天窗打开（24款C11等车型） | 4位操作密码 |
+| `sunroofClose` | `300` | `{"value":"0"}` | 电动车顶玻璃天窗关闭（24款C11等车型） | 4位操作密码 |
 | `horn` | `120` | `{"value":"true"}` | 鸣笛闪灯寻车 | 4位操作密码 |
 | `batteryPreheat` | `160` | `{"value":"ptcon"}` | 开启电池电芯加热预热 | 4位操作密码 |
 | `batteryPreheatOff`| `160` | `{"value":"ptcoff"}` | 停止电池加热预热 | 4位操作密码 |

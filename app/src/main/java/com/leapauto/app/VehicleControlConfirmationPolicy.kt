@@ -21,7 +21,7 @@ object VehicleControlConfirmationPolicy {
         commandName == "lock" || commandName == "unlock" -> 800L
         commandName == "trunkOpen" || commandName == "trunkClose" || commandName == "trunk" -> 800L
         commandName == "frunkOpen" || commandName == "frunk" -> 600L
-        commandName.startsWith("window") -> 500L
+        commandName.startsWith("window") || commandName.startsWith("sunroof") -> 500L
         else -> 0L
     }
 
@@ -29,7 +29,7 @@ object VehicleControlConfirmationPolicy {
      * 各类控车指令的阶梯静默确认轮询时序检查点（毫秒）：
      * - 车门锁：1.2s ➔ 1.5s ➔ 2.0s ➔ 2.5s
      * - 后备箱（电尾门）：1.5s ➔ 3.0s ➔ 5.0s（电尾门运动耗时较长）
-     * - 车窗（电机连续升降）：1.2s ➔ 2.0s ➔ 3.5s ➔ 5.0s
+     * - 车窗 / 天窗（电机连续升降/开闭）：1.2s ➔ 2.0s ➔ 3.5s ➔ 5.0s
      * - 前备箱：1.2s ➔ 2.0s
      * - 座舱舒适/硬件（座椅/方向盘/后视镜/冰箱）：1.0s ➔ 1.8s ➔ 2.5s
      * - 其他指令：兜底 1.5s ➔ 2.5s
@@ -37,7 +37,7 @@ object VehicleControlConfirmationPolicy {
     fun telemetryRefreshScheduleMs(commandName: String): List<Long> = when {
         commandName == "lock" || commandName == "unlock" -> listOf(1_200L, 1_500L, 2_000L, 2_500L)
         commandName == "trunkOpen" || commandName == "trunkClose" || commandName == "trunk" -> listOf(1_500L, 3_000L, 5_000L)
-        commandName.startsWith("window") -> listOf(1_200L, 2_000L, 3_500L, 5_000L)
+        commandName.startsWith("window") || commandName.startsWith("sunroof") -> listOf(1_200L, 2_000L, 3_500L, 5_000L)
         commandName == "frunkOpen" || commandName == "frunk" -> listOf(1_200L, 2_000L)
         isComfortOrHardwareCommand(commandName) -> listOf(1_000L, 1_800L, 2_500L)
         else -> listOf(1_500L, 2_500L)
@@ -56,7 +56,8 @@ object VehicleControlConfirmationPolicy {
         commandName == "lock" || commandName == "unlock" ||
         commandName.startsWith("trunk") ||
         commandName.startsWith("frunk") ||
-        commandName.startsWith("window")
+        commandName.startsWith("window") ||
+        commandName.startsWith("sunroof")
 
     /**
      * 同座椅加热与通风物理互斥解析：

@@ -138,6 +138,9 @@ data class VehicleStatus(
     val chargeScheduleSocLimit: Int? = null,
     val chargeGunConnected: Boolean = false,
     val roofOpeningPercent: Int? = null,
+    val sunroofAvailable: Boolean = false,
+    val sunroofOpen: Boolean = false,
+    val sunroofOpeningPercent: Int? = null,
     val fridgeStatus: FridgeStatus? = null,
     val carType: String? = null
 )
@@ -202,6 +205,8 @@ class MainActivity : ComponentActivity() {
     @Volatile private var climateOptimisticGuard: ClimateOptimisticGuard? = null
     @Volatile private var optimisticWindowPercent: Int? = null
     @Volatile private var lastWindowActionEpochMs = 0L
+    @Volatile private var optimisticSunroofOpen: Boolean? = null
+    @Volatile private var lastSunroofActionEpochMs = 0L
     @Volatile private var optimisticTrunkState: TrunkState? = null
     @Volatile private var lastTrunkActionEpochMs = 0L
     @Volatile private var optimisticHoodOpen: Boolean? = null
@@ -256,6 +261,7 @@ class MainActivity : ComponentActivity() {
     private var scheduledPreheatDays by mutableStateOf("1,1,1,1,1,1,1")
     private var signalMapDebugState by mutableStateOf<VehicleSignalMapDebugState>(VehicleSignalMapDebugState.Idle)
     private var versionUpdateState by mutableStateOf<VersionUpdateState>(VersionUpdateState.Idle)
+    private var vehicleOtaState by mutableStateOf<VehicleOtaState>(VehicleOtaState.Idle)
     private var showPowerTypeDialog by mutableStateOf(false)
     private var handledUpdateVersion by mutableStateOf<String?>(null)
     private var downloadUpdateProgress by mutableStateOf<Int?>(null)
@@ -459,6 +465,11 @@ class MainActivity : ComponentActivity() {
                     currentVersion = AppReleaseInfo.currentVersion,
                     currentReleaseNotes = AppReleaseInfo.currentReleaseNotes,
                     versionUpdateState = versionUpdateState,
+                    vehicleOtaState = vehicleOtaState,
+                    onCheckVehicleOta = { checkForVehicleOta(force = true) },
+                    onDownloadVehicleOta = ::downloadVehicleOta,
+                    onInstallVehicleOta = ::installVehicleOta,
+                    onScheduleVehicleOta = ::scheduleVehicleOta,
                     handledUpdateVersion = handledUpdateVersion,
                     showAuthorSupportDialog = showAuthorSupportDialog,
                     showSessionExpiredDialog = showSessionExpiredDialog,
@@ -615,7 +626,8 @@ class MainActivity : ComponentActivity() {
         bluetoothPermissionsGranted = bluetoothKeyController.hasPermissions()
         val identity = currentBluetoothIdentity() ?: return
         if (bluetoothSessionIdentity != null && bluetoothSessionIdentity != identity) {
-            clearBluetoothState(closePage = true)
+        clearBluetoothState(closePage = true)
+        vehicleOtaState = VehicleOtaState.Idle
         }
         bluetoothSessionIdentity = identity
         bluetoothCloud.attach(identity)
@@ -1342,6 +1354,8 @@ class MainActivity : ComponentActivity() {
         lastTrunkActionEpochMs = 0L
         optimisticWindowPercent = null
         lastWindowActionEpochMs = 0L
+        optimisticSunroofOpen = null
+        lastSunroofActionEpochMs = 0L
         clearPendingPinProtectedAction(cancel = true)
         ErrorLogs.repository.clear()
         energyCacheStore.clearAll()
@@ -1376,6 +1390,7 @@ class MainActivity : ComponentActivity() {
         signalMapDebugState = VehicleSignalMapDebugState.Idle
         loggedIn = false
         versionUpdateState = VersionUpdateState.Idle
+        vehicleOtaState = VehicleOtaState.Idle
         busy = false
         toast("已登出")
     }
@@ -1986,6 +2001,74 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun checkForVehicleOta(force: Boolean = false) {
+        val vin = session.selectedVin
+        if (vin.isBlank() || !loggedIn) return
+        val currentVehicle = availableVehicles.firstOrNull { it.vin == vin }
+        if (currentVehicle?.isSharedAccount == true) {
+            vehicleOtaState = VehicleOtaState.Error(VehicleOtaPolicy.SUB_ACCOUNT_OTA_UNSUPPORTED_MESSAGE)
+            return
+        }
+        if (!force && vehicleOtaState is VehicleOtaState.Checking) return
+        vehicleOtaState = VehicleOtaState.Checking
+        val generation = operationGeneration
+        asyncWorker.execute {
+            try {
+                val api = LeapmotorApi(session)
+                val info = api.getVehicleOtaInfo(vin)
+                runOnMain(generation) {
+                    vehicleOtaState = if (info != null) {
+                        VehicleOtaState.Success(info)
+                    } else {
+                        VehicleOtaState.Success(VehicleOtaInfo(currentVersion = "车机系统", hasNewVersion = false, status = OtaStatus.UP_TO_DATE))
+                    }
+                }
+            } catch (e: Exception) {
+                runOnMain(generation) {
+                    vehicleOtaState = VehicleOtaState.Error(e.message ?: "检查车机更新失败")
+                }
+            }
+        }
+    }
+
+    private fun downloadVehicleOta(taskId: String) {
+        if (taskId.isBlank()) return
+        val currentVehicle = availableVehicles.firstOrNull { it.vin == session.selectedVin }
+        if (currentVehicle?.isSharedAccount == true) {
+            toast(VehicleOtaPolicy.SUB_ACCOUNT_OTA_UNSUPPORTED_MESSAGE)
+            return
+        }
+        control(Commands.build("fotaDownload:$taskId"), commandName = "fotaDownload:$taskId")
+    }
+
+    private fun installVehicleOta(taskId: String, pin: String) {
+        if (taskId.isBlank()) return
+        val currentVehicle = availableVehicles.firstOrNull { it.vin == session.selectedVin }
+        if (currentVehicle?.isSharedAccount == true) {
+            toast(VehicleOtaPolicy.SUB_ACCOUNT_OTA_UNSUPPORTED_MESSAGE)
+            return
+        }
+        if (pin.length == 4) {
+            sessionStore.saveOpPassword(pin)
+            pinSaved = true
+        }
+        control(Commands.build("fotaInstall:$taskId"), commandName = "fotaInstall:$taskId")
+    }
+
+    private fun scheduleVehicleOta(taskId: String, scheduleTime: String, pin: String) {
+        if (taskId.isBlank() || scheduleTime.isBlank()) return
+        val currentVehicle = availableVehicles.firstOrNull { it.vin == session.selectedVin }
+        if (currentVehicle?.isSharedAccount == true) {
+            toast(VehicleOtaPolicy.SUB_ACCOUNT_OTA_UNSUPPORTED_MESSAGE)
+            return
+        }
+        if (pin.length == 4) {
+            sessionStore.saveOpPassword(pin)
+            pinSaved = true
+        }
+        control(Commands.build("fotaSchedule:$taskId:$scheduleTime"), commandName = "fotaSchedule:$taskId:$scheduleTime")
+    }
+
     private var lastUpdateCheckEpochMs = 0L
 
     private fun checkForUpdate(force: Boolean = false) {
@@ -2074,6 +2157,8 @@ class MainActivity : ComponentActivity() {
             lastFrunkActionEpochMs = 0L
             optimisticWindowPercent = null
             lastWindowActionEpochMs = 0L
+            optimisticSunroofOpen = null
+            lastSunroofActionEpochMs = 0L
             optimisticLockState = null
             lastLockActionEpochMs = 0L
             cancelPendingLockStatusRefreshes()
@@ -2228,11 +2313,13 @@ class MainActivity : ComponentActivity() {
                     val nowMs = System.currentTimeMillis()
                     val trunkProtected = nowMs - lastTrunkActionEpochMs < 15_000L
                     val winProtected = nowMs - lastWindowActionEpochMs < 15_000L
+                    val sunroofProtected = nowMs - lastSunroofActionEpochMs < 15_000L
                     val lockProtected = nowMs - lastLockActionEpochMs < 15_000L
                     val frunkProtected = nowMs - lastFrunkActionEpochMs < 15_000L
                     if (!trunkProtected) optimisticTrunkState = null
                     if (!frunkProtected) optimisticHoodOpen = null
                     if (!winProtected) optimisticWindowPercent = null
+                    if (!sunroofProtected) optimisticSunroofOpen = null
                     if (!lockProtected) optimisticLockState = null
                     if (lockProtected && optimisticLockState != null && parsed.locked == optimisticLockState) {
                         optimisticLockState = null
@@ -2249,6 +2336,11 @@ class MainActivity : ComponentActivity() {
                         lastFrunkActionEpochMs = 0L
                         cancelPendingControlStatusRefreshes()
                     }
+                    if (sunroofProtected && optimisticSunroofOpen != null && parsed.sunroofOpen == optimisticSunroofOpen) {
+                        optimisticSunroofOpen = null
+                        lastSunroofActionEpochMs = 0L
+                        cancelPendingControlStatusRefreshes()
+                    }
                     if (winProtected && optimisticWindowPercent != null) {
                         val isAllClosed = parsed.openWindows.isEmpty() && (parsed.leftFrontWindowPercent ?: 0) == 0
                         if (optimisticWindowPercent == 0 && isAllClosed) {
@@ -2263,6 +2355,8 @@ class MainActivity : ComponentActivity() {
                     }
                     val effectiveLock = if (lockProtected && optimisticLockState != null) optimisticLockState else parsed.locked
                     val effectiveHoodOpen = if (frunkProtected && optimisticHoodOpen != null) (optimisticHoodOpen == true) else parsed.hoodOpen
+                    val effectiveSunroofOpen = if (sunroofProtected && optimisticSunroofOpen != null) (optimisticSunroofOpen == true) else parsed.sunroofOpen
+                    val effectiveSunroofPercent = if (sunroofProtected && optimisticSunroofOpen != null) (if (optimisticSunroofOpen == true) 100 else 0) else parsed.sunroofOpeningPercent
                     val winPercent = if (winProtected) optimisticWindowPercent else null
                     val trunk = if (trunkProtected) optimisticTrunkState else null
                     val comfortProtected = nowMs - lastComfortActionEpochMs < 15_000L
@@ -2298,6 +2392,8 @@ class MainActivity : ComponentActivity() {
                     status = baseRefreshed.copy(
                         locked = effectiveLock,
                         hoodOpen = effectiveHoodOpen,
+                        sunroofOpen = effectiveSunroofOpen,
+                        sunroofOpeningPercent = effectiveSunroofPercent,
                         leftFrontWindowPercent = winPercent ?: baseRefreshed.leftFrontWindowPercent,
                         rightFrontWindowPercent = winPercent ?: baseRefreshed.rightFrontWindowPercent,
                         leftRearWindowPercent = winPercent ?: baseRefreshed.leftRearWindowPercent,
@@ -2732,6 +2828,8 @@ class MainActivity : ComponentActivity() {
         commandName == "frunkClose" -> optimisticHoodOpen == null && status?.hoodOpen == false
         commandName == "windowClose" -> optimisticWindowPercent == null && (status?.openWindows.isNullOrEmpty())
         commandName == "windowVent" || commandName == "windowOpen" -> optimisticWindowPercent == null
+        commandName == "sunroofOpen" -> optimisticSunroofOpen == null && status?.sunroofOpen == true
+        commandName == "sunroofClose" -> optimisticSunroofOpen == null && status?.sunroofOpen == false
         commandName.startsWith("driverSeatHeating_") -> optimisticDriverSeatHeating == null
         commandName.startsWith("driverSeatVentilation_") -> optimisticDriverSeatVentilation == null
         commandName.startsWith("passengerSeatHeating_") -> optimisticPassengerSeatHeating == null
@@ -3462,6 +3560,9 @@ class MainActivity : ComponentActivity() {
                 ?: healthyChargeLimitSoc,
             chargeGunConnected = ChargeStatus.isGunConnected(m),
             roofOpeningPercent = m.opt("roofOpening")?.toString()?.toIntOrNull(),
+            sunroofAvailable = SunroofCapabilityPolicy.isAvailable((m.opt("sunroofOpening") ?: m.opt("1718"))?.toString()?.toIntOrNull()),
+            sunroofOpen = SunroofCapabilityPolicy.isOpen((m.opt("sunroofOpening") ?: m.opt("1718"))?.toString()?.toIntOrNull()),
+            sunroofOpeningPercent = SunroofCapabilityPolicy.parseOpeningPercent((m.opt("sunroofOpening") ?: m.opt("1718"))?.toString()?.toIntOrNull()),
             fridgeStatus = parseFridgeStatus(m),
             carType = session.selectedCarType
         )
@@ -3848,6 +3949,30 @@ class MainActivity : ComponentActivity() {
                     CompactControlWidget.refreshData(this@MainActivity)
                 }
             }
+            "sunroofOpen" -> {
+                postOptimisticResponse(500L) {
+                    lastSunroofActionEpochMs = System.currentTimeMillis()
+                    optimisticSunroofOpen = true
+                    status = status?.copy(
+                        sunroofOpen = true,
+                        sunroofOpeningPercent = 100
+                    )
+                    ControlWidget.refreshData(this@MainActivity)
+                    CompactControlWidget.refreshData(this@MainActivity)
+                }
+            }
+            "sunroofClose" -> {
+                postOptimisticResponse(500L) {
+                    lastSunroofActionEpochMs = System.currentTimeMillis()
+                    optimisticSunroofOpen = false
+                    status = status?.copy(
+                        sunroofOpen = false,
+                        sunroofOpeningPercent = 0
+                    )
+                    ControlWidget.refreshData(this@MainActivity)
+                    CompactControlWidget.refreshData(this@MainActivity)
+                }
+            }
             else -> {
                 if (effectiveCmdName.startsWith("driverSeatHeating_")) {
                     val lvl = effectiveCmdName.removePrefix("driverSeatHeating_").toIntOrNull() ?: 0
@@ -4047,6 +4172,8 @@ class MainActivity : ComponentActivity() {
                     optimisticTrunkState = null
                     lastWindowActionEpochMs = 0L
                     optimisticWindowPercent = null
+                    lastSunroofActionEpochMs = 0L
+                    optimisticSunroofOpen = null
                     lastComfortActionEpochMs = 0L
                     optimisticDriverSeatHeating = null
                     optimisticDriverSeatVentilation = null

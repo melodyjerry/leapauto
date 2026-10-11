@@ -25,6 +25,8 @@ class VehicleControlConfirmationPolicyTest {
         assertEquals(500L, VehicleControlConfirmationPolicy.responseDelayMs("windowVent"))
         assertEquals(500L, VehicleControlConfirmationPolicy.responseDelayMs("windowOpen"))
         assertEquals(500L, VehicleControlConfirmationPolicy.responseDelayMs("windowClose"))
+        assertEquals(500L, VehicleControlConfirmationPolicy.responseDelayMs("sunroofOpen"))
+        assertEquals(500L, VehicleControlConfirmationPolicy.responseDelayMs("sunroofClose"))
 
         // 电子继电器类（0ms 纯电路即刻响应）
         assertEquals(0L, VehicleControlConfirmationPolicy.responseDelayMs("driverSeatHeating_1"))
@@ -67,6 +69,14 @@ class VehicleControlConfirmationPolicyTest {
             listOf(1_200L, 2_000L, 3_500L, 5_000L),
             VehicleControlConfirmationPolicy.telemetryRefreshScheduleMs("windowClose")
         )
+        assertEquals(
+            listOf(1_200L, 2_000L, 3_500L, 5_000L),
+            VehicleControlConfirmationPolicy.telemetryRefreshScheduleMs("sunroofOpen")
+        )
+        assertEquals(
+            listOf(1_200L, 2_000L, 3_500L, 5_000L),
+            VehicleControlConfirmationPolicy.telemetryRefreshScheduleMs("sunroofClose")
+        )
 
         // 前备箱：1.2s ➔ 2.0s
         assertEquals(
@@ -94,6 +104,8 @@ class VehicleControlConfirmationPolicyTest {
         assertTrue(VehicleControlConfirmationPolicy.isMechanicalCommand("lock"))
         assertTrue(VehicleControlConfirmationPolicy.isMechanicalCommand("trunkOpen"))
         assertTrue(VehicleControlConfirmationPolicy.isMechanicalCommand("windowVent"))
+        assertTrue(VehicleControlConfirmationPolicy.isMechanicalCommand("sunroofOpen"))
+        assertTrue(VehicleControlConfirmationPolicy.isMechanicalCommand("sunroofClose"))
         assertFalse(VehicleControlConfirmationPolicy.isMechanicalCommand("driverSeatHeating_1"))
 
         assertTrue(VehicleControlConfirmationPolicy.isComfortOrHardwareCommand("driverSeatHeating_1"))
