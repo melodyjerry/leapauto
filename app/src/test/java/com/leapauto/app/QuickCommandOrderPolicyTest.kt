@@ -80,6 +80,8 @@ class QuickCommandOrderPolicyTest {
         assertTrue(QuickCommandExecutionPolicy.isCommandInProgress("windowGroup", "windowVent"))
         assertTrue(QuickCommandExecutionPolicy.isCommandInProgress("windowGroup", "windowOpen"))
         assertTrue(QuickCommandExecutionPolicy.isCommandInProgress("sunshadeGroup", "sunshadeOpen"))
+        assertTrue(QuickCommandExecutionPolicy.isCommandInProgress("sunroofGroup", "sunroofOpen"))
+        assertTrue(QuickCommandExecutionPolicy.isCommandInProgress("sunroofGroup", "sunroofClose"))
         assertTrue(QuickCommandExecutionPolicy.isCommandInProgress("sentry", "sentryOn"))
 
         assertFalse(QuickCommandExecutionPolicy.isCommandInProgress("unlock", "lock"))

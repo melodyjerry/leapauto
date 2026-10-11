@@ -398,6 +398,8 @@ object ControlFeedbackFormatter {
             key == "sunshadeOpen" || key == "遮阳帘开启" -> "开启遮阳帘中..."
             key == "sunshadeClose" || key == "遮阳帘关闭" -> "关闭遮阳帘中..."
             key == "sunshadeHalf" || key == "遮阳帘半开" -> "调节遮阳帘中..."
+            key == "sunroofOpen" || key == "天窗开启" || key == "打开天窗" -> "开启天窗中..."
+            key == "sunroofClose" || key == "天窗关闭" || key == "关闭天窗" -> "关闭天窗中..."
             key == "acOn" || key == "开空调" -> "正在开启制冷..."
             key == "acOff" || key == "关空调" -> "正在关闭空调..."
             key == "quickCool" || key == "极速降温" -> "正在开启极速降温..."
@@ -462,6 +464,8 @@ object ControlFeedbackFormatter {
             key == "sunshadeOpen" || key == "遮阳帘开启" -> "遮阳帘已开启"
             key == "sunshadeClose" || key == "遮阳帘关闭" -> "遮阳帘已关闭"
             key == "sunshadeHalf" || key == "遮阳帘半开" -> "遮阳帘设置成功"
+            key == "sunroofOpen" || key == "天窗开启" || key == "打开天窗" -> "天窗已开启"
+            key == "sunroofClose" || key == "天窗关闭" || key == "关闭天窗" -> "天窗已关闭"
             key == "acOn" || key == "开空调" -> "制冷已开启"
             key == "acOff" || key == "关空调" -> "空调已关闭"
             key == "quickCool" || key == "极速降温" -> "极速降温已开启"
@@ -932,6 +936,8 @@ object Commands {
         "windowClose" -> ControlCommand("230", """{"value":"0"}""", "车窗全关")
         "sunshadeOpen" -> ControlCommand("240", """{"value":"10"}""", "遮阳帘打开")
         "sunshadeClose" -> ControlCommand("240", """{"value":"0"}""", "遮阳帘关闭")
+        "sunroofOpen" -> ControlCommand("300", """{"value":"1"}""", "天窗打开")
+        "sunroofClose" -> ControlCommand("300", """{"value":"0"}""", "天窗关闭")
         "horn" -> ControlCommand("120", """{"value":"true"}""", "鸣笛寻车")
         "batteryPreheat" -> ControlCommand("160", """{"value":"ptcon"}""", "电池预热开")
         "batteryPreheatOff" -> ControlCommand("160", """{"value":"ptcoff"}""", "电池预热关")
@@ -1393,6 +1399,7 @@ object QuickCommandExecutionPolicy {
             "trunk" -> activeCmd == "trunkOpen" || activeCmd == "trunkClose"
             "windowGroup" -> activeCmd.startsWith("window")
             "sunshadeGroup" -> activeCmd.startsWith("sunshade")
+            "sunroofGroup" -> activeCmd.startsWith("sunroof")
             "sentry" -> activeCmd.startsWith("sentry")
             "fridge" -> activeCmd.startsWith("fridge")
             else -> activeCmd == commandName
@@ -1417,6 +1424,43 @@ object SunshadeMenuPolicy {
         "sunshadeClose" -> R.drawable.ic_sunshade_close
         else -> R.drawable.ic_phosphor_sun
     }
+}
+
+data class SunroofMenuItem(
+    val command: String,
+    val label: String,
+    val iconRes: Int
+)
+
+object SunroofMenuPolicy {
+    val items = listOf(
+        SunroofMenuItem("sunroofOpen", "打开天窗", R.drawable.ic_sunroof_open),
+        SunroofMenuItem("sunroofClose", "关闭天窗", R.drawable.ic_sunroof_close)
+    )
+
+    fun iconForCommand(command: String): Int = when (command) {
+        "sunroofOpen" -> R.drawable.ic_sunroof_open
+        "sunroofClose" -> R.drawable.ic_sunroof_close
+        else -> R.drawable.ic_sunroof
+    }
+}
+
+object SunroofCapabilityPolicy {
+    /**
+     * 4-bit CAN 信号有效开度范围：0(全关) .. 10(全开 100%)。
+     * 未选装可开启天窗的车型（如纯天幕车型或未选装车型），网关会返回 15 或 150 等 CAN SNA (Signal Not Available / 未选配占位值)。
+     */
+    fun isValidSignal(raw: Int?): Boolean =
+        raw != null && raw in 0..10
+
+    fun parseOpeningPercent(raw: Int?): Int? =
+        if (isValidSignal(raw)) (raw ?: 0) * 10 else null
+
+    fun isOpen(raw: Int?): Boolean =
+        isValidSignal(raw) && (raw ?: 0) > 0
+
+    fun isAvailable(raw: Int?): Boolean =
+        isValidSignal(raw)
 }
 
 object OperationPasswordErrorPolicy {

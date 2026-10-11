@@ -326,6 +326,7 @@ object VehicleHealthDiagnostics {
         if (status.leftRearDoorOpen) openDoors.add("左后门")
         if (status.rightRearDoorOpen) openDoors.add("右后门")
         if (status.trunkState == TrunkState.OPEN) openDoors.add("后备箱")
+        if (status.hoodOpen) openDoors.add("前机盖")
 
         if (openDoors.isNotEmpty()) {
             score -= 10
@@ -390,6 +391,29 @@ object VehicleHealthDiagnostics {
                     level = HealthCheckLevel.GOOD
                 )
             )
+        }
+
+        // 3.4.1 电动车顶天窗
+        if (status.sunroofAvailable) {
+            if (status.sunroofOpen) {
+                bodyItems.add(
+                    HealthCheckItem(
+                        title = "电动车顶天窗检测",
+                        detail = "车顶天窗处于开启状态 (${status.sunroofOpeningPercent ?: 100}%)，离车建议闭合以防雨淋",
+                        level = HealthCheckLevel.WARNING,
+                        fixCommand = "sunroofClose",
+                        fixLabel = "关闭天窗"
+                    )
+                )
+            } else {
+                bodyItems.add(
+                    HealthCheckItem(
+                        title = "电动车顶天窗密封",
+                        detail = "车顶天窗已完全关闭锁止",
+                        level = HealthCheckLevel.GOOD
+                    )
+                )
+            }
         }
 
         // 3.5 哨兵与防盗安防
