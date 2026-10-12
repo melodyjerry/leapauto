@@ -28,7 +28,32 @@ jobs:
       - name: Ensure Android SDK packages
         shell: pwsh
         continue-on-error: true
-        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+        run: |
+          $sdkRoot = if ($env:ANDROID_HOME) { $env:ANDROID_HOME } else { $env:ANDROID_SDK_ROOT }
+          $sdkmanager = Join-Path $sdkRoot 'cmdline-tools\latest\bin\sdkmanager.bat'
+          if (Test-Path $sdkmanager) {
+            & $sdkmanager --install "platforms;android-35" "build-tools;35.0.0"
+          } else {
+            Write-Warning "sdkmanager not found under $sdkRoot; relying on preinstalled SDK components."
+          }
+
+      - name: Neutralize machine-specific Gradle settings
+        shell: pwsh
+        run: |
+          $path = 'gradle.properties'
+          $lines = Get-Content -LiteralPath $path
+          $lines = $lines | Where-Object {
+            $_ -notmatch '^\s*org\.gradle\.java\.home\s*='
+          } | ForEach-Object {
+            if ($_ -match '^\s*org\.gradle\.jvmargs\s*=') {
+              'org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8'
+            } else {
+              $_
+            }
+          }
+          Set-Content -LiteralPath $path -Value $lines -Encoding utf8
+          Write-Host "gradle.properties after CI fixup:"
+          Get-Content -LiteralPath $path
 
       - name: Prepare signing from repository secrets
         id: signing
