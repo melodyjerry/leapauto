@@ -215,6 +215,19 @@ class SessionStore(context: Context) {
         prefs.edit().putInt(key, soc.coerceIn(50, 100)).apply()
     }
 
+    /** 电池健康充电开关状态（按 VIN 隔离存储，默认开启）。 */
+    fun loadHealthyChargeEnabled(vin: String): Boolean {
+        if (vin.isBlank()) return true
+        val key = "healthy_charge_enabled_$vin"
+        return prefs.getBoolean(key, true)
+    }
+
+    fun saveHealthyChargeEnabled(vin: String, enabled: Boolean) {
+        if (vin.isBlank()) return
+        val key = "healthy_charge_enabled_$vin"
+        prefs.edit().putBoolean(key, enabled).apply()
+    }
+
     // 预约充电设置（默认 23:00 开始，次日 07:00 结束）
     fun loadScheduledChargeEnabled(vin: String): Boolean {
         if (vin.isBlank()) return false

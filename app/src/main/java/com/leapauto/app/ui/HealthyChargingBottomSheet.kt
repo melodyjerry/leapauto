@@ -124,6 +124,11 @@ fun HealthyChargingBottomSheet(
     val context = LocalContext.current
     var lastToastTime by remember { mutableLongStateOf(0L) }
 
+    // 每次进入充电中心界面，第一时间无条件向服务器强制拉取最新云端充电计划与车况遥测
+    LaunchedEffect(Unit) {
+        onRefreshStatus()
+    }
+
     // 充电中每 1 秒自动静默刷新车况，实时同步电量、功率与倒计时
     val isChargingState = status?.chargeState == 1
     LaunchedEffect(isChargingState) {
@@ -156,6 +161,39 @@ fun HealthyChargingBottomSheet(
     var scheduledPreheatStartTime by remember(initialScheduledPreheatStartTime) { mutableStateOf(initialScheduledPreheatStartTime.ifBlank { "13:35" }) }
     var preheatDays by remember(initialScheduledPreheatDays) {
         mutableStateOf(ChargePlanCyclesHelper.parseToDaySet(initialScheduledPreheatDays))
+    }
+
+    // 监听云端异步拉取的最新设置，保证在后台刷新完成后即刻平滑回显
+    LaunchedEffect(isHealthyChargeEnabled) {
+        healthySwitchEnabled = isHealthyChargeEnabled
+    }
+    LaunchedEffect(currentLimitSoc, isHealthyChargeEnabled) {
+        val base = currentLimitSoc.toFloat().coerceIn(50f, 100f)
+        selectedSoc = if (isHealthyChargeEnabled && base >= 100f) 90f else base
+    }
+    LaunchedEffect(initialScheduledChargeEnabled) {
+        scheduledChargeEnabled = initialScheduledChargeEnabled
+    }
+    LaunchedEffect(initialScheduledStartTime) {
+        scheduledStartTime = initialScheduledStartTime.ifBlank { "22:00" }
+    }
+    LaunchedEffect(initialScheduledEndTime) {
+        scheduledEndTime = initialScheduledEndTime.ifBlank { "06:30" }
+    }
+    LaunchedEffect(initialContinueUntilLimit) {
+        continueUntilLimit = initialContinueUntilLimit
+    }
+    LaunchedEffect(initialScheduledCycles) {
+        scheduledDays = ChargePlanCyclesHelper.parseToDaySet(initialScheduledCycles)
+    }
+    LaunchedEffect(initialScheduledPreheatEnabled) {
+        scheduledPreheatEnabled = initialScheduledPreheatEnabled
+    }
+    LaunchedEffect(initialScheduledPreheatStartTime) {
+        scheduledPreheatStartTime = initialScheduledPreheatStartTime.ifBlank { "13:35" }
+    }
+    LaunchedEffect(initialScheduledPreheatDays) {
+        preheatDays = ChargePlanCyclesHelper.parseToDaySet(initialScheduledPreheatDays)
     }
 
     // 弹窗控制
@@ -877,7 +915,7 @@ fun HealthyChargingBottomSheet(
                     if (chargingChanged || !preheatChanged) {
                         onApplyChargingSettings(
                             healthySwitchEnabled,
-                            selectedSoc.roundToInt(),
+                            if (healthySwitchEnabled) selectedSoc.roundToInt() else 100,
                             scheduledChargeEnabled,
                             scheduledStartTime,
                             scheduledEndTime,

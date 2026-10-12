@@ -227,6 +227,9 @@ class MainActivity : ComponentActivity() {
     @Volatile private var lastComfortActionEpochMs = 0L
     @Volatile private var optimisticFridgeStatus: FridgeStatus? = null
     @Volatile private var lastFridgeActionEpochMs = 0L
+    @Volatile private var optimisticHealthyChargeLimitSoc: Int? = null
+    @Volatile private var optimisticHealthyChargeEnabled: Boolean? = null
+    @Volatile private var lastChargingSettingsActionEpochMs = 0L
     private var climatePreControlStatus: VehicleStatus? = null
     @Volatile private var pendingClimateConfirmation: PendingClimateConfirmation? = null
     private var pendingStatusRefreshCompletion: ((Boolean) -> Unit)? = null
@@ -628,6 +631,9 @@ class MainActivity : ComponentActivity() {
         if (bluetoothSessionIdentity != null && bluetoothSessionIdentity != identity) {
         clearBluetoothState(closePage = true)
         vehicleOtaState = VehicleOtaState.Idle
+        optimisticHealthyChargeLimitSoc = null
+        optimisticHealthyChargeEnabled = null
+        lastChargingSettingsActionEpochMs = 0L
         }
         bluetoothSessionIdentity = identity
         bluetoothCloud.attach(identity)
@@ -758,34 +764,59 @@ class MainActivity : ComponentActivity() {
                     lastChargePlanFetchEpochMs = System.currentTimeMillis()
                     lastChargePlanFetchVin = targetVin
                     val vehicleMask = plan.cycles?.let { ChargePlanCyclesHelper.toVehicleMask(it) } ?: "1,1,1,1,1,1,1"
-                    sessionStore.saveScheduledChargeEnabled(targetVin, plan.isEnable)
-                    plan.beginTime?.let { sessionStore.saveScheduledChargeStartTime(targetVin, it) }
-                    plan.endTime?.let { sessionStore.saveScheduledChargeEndTime(targetVin, it) }
-                    sessionStore.saveScheduledChargeCycles(targetVin, vehicleMask)
-                    sessionStore.saveScheduledChargeCirculation(targetVin, plan.circulation)
-                    sessionStore.saveScheduledChargeContinueUntilLimit(targetVin, plan.recharge)
-                    plan.percent?.let { sessionStore.saveHealthyChargeLimit(targetVin, it) }
+                    val chargingProtected = System.currentTimeMillis() - lastChargingSettingsActionEpochMs < 15_000L
+                    if (!chargingProtected) {
+                        sessionStore.saveScheduledChargeEnabled(targetVin, plan.isEnable)
+                        plan.beginTime?.let { sessionStore.saveScheduledChargeStartTime(targetVin, it) }
+                        plan.endTime?.let { sessionStore.saveScheduledChargeEndTime(targetVin, it) }
+                        sessionStore.saveScheduledChargeCycles(targetVin, vehicleMask)
+                        sessionStore.saveScheduledChargeCirculation(targetVin, plan.circulation)
+                        sessionStore.saveScheduledChargeContinueUntilLimit(targetVin, plan.recharge)
+                        plan.percent?.let { sessionStore.saveHealthyChargeLimit(targetVin, it) }
+                    }
+
+                    // 进一步从云端直接查询健康充电控制策略 (queryPushState)，闭环更新开关状态与目标限额
+                    val healthyResp = runCatching { api.queryHealthyChargingPushState() }.getOrNull()
+                    val healthyData = healthyResp?.optJSONObject("data")
+                    val serverState = healthyData?.optInt("state", -1)
+                    val serverSoc = healthyData?.optInt("targetSoc", healthyData.optInt("soc", -1))
 
                     mainHandler.post {
                         if (session.selectedVin == targetVin) {
-                            scheduledChargeEnabled = plan.isEnable
-                            plan.beginTime?.let { scheduledChargeStartTime = it }
-                            plan.endTime?.let { scheduledChargeEndTime = it }
-                            scheduledChargeCycles = vehicleMask
-                            scheduledChargeCirculation = plan.circulation
-                            scheduledChargeContinueUntilLimit = plan.recharge
-                            plan.percent?.let { healthyChargeLimitSoc = it }
+                            if (!chargingProtected) {
+                                scheduledChargeEnabled = plan.isEnable
+                                plan.beginTime?.let { scheduledChargeStartTime = it }
+                                plan.endTime?.let { scheduledChargeEndTime = it }
+                                scheduledChargeCycles = vehicleMask
+                                scheduledChargeCirculation = plan.circulation
+                                scheduledChargeContinueUntilLimit = plan.recharge
 
-                            // 同步驱动首页充电小胶囊与车况模型实时更新
-                            status = status?.copy(
-                                chargeScheduleEnabled = plan.isEnable,
-                                chargeScheduleStart = plan.beginTime,
-                                chargeScheduleEnd = plan.endTime,
-                                chargeScheduleCycles = plan.cycles,
-                                chargeScheduleCirculation = plan.circulation,
-                                chargeScheduleRecharge = plan.recharge,
-                                chargeScheduleSocLimit = plan.percent
-                            )
+                                if (serverSoc != null && serverSoc in 50..100) {
+                                    healthyChargeLimitSoc = serverSoc
+                                    sessionStore.saveHealthyChargeLimit(targetVin, serverSoc)
+                                } else if (plan.percent != null) {
+                                    healthyChargeLimitSoc = plan.percent
+                                }
+
+                                val isHealthyEnabled = if (serverState != null && serverState in 0..1) {
+                                    serverState == 1
+                                } else {
+                                    sessionStore.loadHealthyChargeEnabled(targetVin)
+                                }
+                                sessionStore.saveHealthyChargeEnabled(targetVin, isHealthyEnabled)
+
+                                // 同步驱动首页充电小胶囊与车况模型实时更新
+                                status = status?.copy(
+                                    healthyChargeEnabled = isHealthyEnabled,
+                                    chargeScheduleEnabled = plan.isEnable,
+                                    chargeScheduleStart = plan.beginTime,
+                                    chargeScheduleEnd = plan.endTime,
+                                    chargeScheduleCycles = plan.cycles,
+                                    chargeScheduleCirculation = plan.circulation,
+                                    chargeScheduleRecharge = plan.recharge,
+                                    chargeScheduleSocLimit = if (serverSoc != null && serverSoc in 50..100) serverSoc else plan.percent
+                                )
+                            }
                         }
                     }
                 }
@@ -1356,6 +1387,9 @@ class MainActivity : ComponentActivity() {
         lastWindowActionEpochMs = 0L
         optimisticSunroofOpen = null
         lastSunroofActionEpochMs = 0L
+        optimisticHealthyChargeLimitSoc = null
+        optimisticHealthyChargeEnabled = null
+        lastChargingSettingsActionEpochMs = 0L
         clearPendingPinProtectedAction(cancel = true)
         ErrorLogs.repository.clear()
         energyCacheStore.clearAll()
@@ -1687,7 +1721,13 @@ class MainActivity : ComponentActivity() {
     ) {
         val vin = session.selectedVin
         val vehicleCycles = ChargePlanCyclesHelper.toVehicleMask(cycles)
+        val now = System.currentTimeMillis()
+        lastChargingSettingsActionEpochMs = now
+        optimisticHealthyChargeLimitSoc = targetSoc
+        optimisticHealthyChargeEnabled = healthyEnabled
+
         sessionStore.saveHealthyChargeLimit(vin, targetSoc)
+        sessionStore.saveHealthyChargeEnabled(vin, healthyEnabled)
         sessionStore.saveScheduledChargeEnabled(vin, scheduledEnabled)
         sessionStore.saveScheduledChargeStartTime(vin, startTime)
         sessionStore.saveScheduledChargeEndTime(vin, endTime)
@@ -1701,6 +1741,18 @@ class MainActivity : ComponentActivity() {
         scheduledChargeContinueUntilLimit = continueUntilLimit
         scheduledChargeCirculation = circulation
         scheduledChargeCycles = vehicleCycles
+
+        // 立即乐观更新当前内存 status，确保进入充电中心即刻精准回显
+        status = status?.copy(
+            healthyChargeEnabled = healthyEnabled,
+            chargeScheduleSocLimit = targetSoc,
+            chargeScheduleEnabled = scheduledEnabled,
+            chargeScheduleStart = startTime,
+            chargeScheduleEnd = endTime,
+            chargeScheduleCirculation = circulation,
+            chargeScheduleCycles = vehicleCycles,
+            chargeScheduleRecharge = continueUntilLimit
+        )
 
         val started = System.currentTimeMillis()
         worker.execute {
@@ -1760,7 +1812,13 @@ class MainActivity : ComponentActivity() {
                         Toast.makeText(this@MainActivity, "充电设置已保存", Toast.LENGTH_SHORT).show()
                     }
                     refreshStatus()
+                    syncChargePlanFromServer(force = true)
                 }
+                mainHandler.postDelayed({
+                    if (!activityDestroyed && loggedIn) {
+                        syncChargePlanFromServer(force = true)
+                    }
+                }, 1500L)
             } catch (e: Exception) {
                 val elapsed = System.currentTimeMillis() - started
                 val apiError = e as? ApiException
@@ -2316,11 +2374,16 @@ class MainActivity : ComponentActivity() {
                     val sunroofProtected = nowMs - lastSunroofActionEpochMs < 15_000L
                     val lockProtected = nowMs - lastLockActionEpochMs < 15_000L
                     val frunkProtected = nowMs - lastFrunkActionEpochMs < 15_000L
+                    val chargingProtected = nowMs - lastChargingSettingsActionEpochMs < 15_000L
                     if (!trunkProtected) optimisticTrunkState = null
                     if (!frunkProtected) optimisticHoodOpen = null
                     if (!winProtected) optimisticWindowPercent = null
                     if (!sunroofProtected) optimisticSunroofOpen = null
                     if (!lockProtected) optimisticLockState = null
+                    if (!chargingProtected) {
+                        optimisticHealthyChargeLimitSoc = null
+                        optimisticHealthyChargeEnabled = null
+                    }
                     if (lockProtected && optimisticLockState != null && parsed.locked == optimisticLockState) {
                         optimisticLockState = null
                         lastLockActionEpochMs = 0L
@@ -2413,7 +2476,17 @@ class MainActivity : ComponentActivity() {
                         steeringWheelHeating = if (comfortProtected && optimisticSteeringWheelHeating != null) optimisticSteeringWheelHeating else baseRefreshed.steeringWheelHeating,
                         steeringWheelHeatingLevel = if (comfortProtected && optimisticSteeringWheelHeating != null) (if (optimisticSteeringWheelHeating == true) 2 else 0) else baseRefreshed.steeringWheelHeatingLevel,
                         rearviewMirrorHeating = if (comfortProtected && optimisticRearviewMirrorHeating != null) optimisticRearviewMirrorHeating else baseRefreshed.rearviewMirrorHeating,
-                        fridgeStatus = if (fridgeProtected && optimisticFridgeStatus != null) optimisticFridgeStatus else baseRefreshed.fridgeStatus
+                        fridgeStatus = if (fridgeProtected && optimisticFridgeStatus != null) optimisticFridgeStatus else baseRefreshed.fridgeStatus,
+                        healthyChargeEnabled = if (chargingProtected && optimisticHealthyChargeEnabled != null) {
+                            optimisticHealthyChargeEnabled
+                        } else {
+                            baseRefreshed.healthyChargeEnabled ?: sessionStore.loadHealthyChargeEnabled(session.selectedVin)
+                        },
+                        chargeScheduleSocLimit = if (chargingProtected && optimisticHealthyChargeLimitSoc != null) {
+                            optimisticHealthyChargeLimitSoc
+                        } else {
+                            baseRefreshed.chargeScheduleSocLimit ?: healthyChargeLimitSoc
+                        }
                     )
                     statusUpdatedAtEpochMs = receivedAtEpochMs
                     climateOptimisticGuard = ClimateTelemetryMergePolicy.consume(guard, decision)
@@ -2440,35 +2513,37 @@ class MainActivity : ComponentActivity() {
                         syncChargePlanFromServer(currentVin)
                     }
 
-                    // 车端若返回了真实充电计划 (config.3)，同步反显更新
-                    parsed.chargeScheduleEnabled?.let { schedEnabled ->
-                        scheduledChargeEnabled = schedEnabled
-                        sessionStore.saveScheduledChargeEnabled(session.selectedVin, schedEnabled)
-                    }
-                    parsed.chargeScheduleStart?.let { start ->
-                        scheduledChargeStartTime = start
-                        sessionStore.saveScheduledChargeStartTime(session.selectedVin, start)
-                    }
-                    parsed.chargeScheduleEnd?.let { end ->
-                        scheduledChargeEndTime = end
-                        sessionStore.saveScheduledChargeEndTime(session.selectedVin, end)
-                    }
-                    parsed.chargeScheduleCycles?.let { cyc ->
-                        val vehicleMask = ChargePlanCyclesHelper.toVehicleMask(cyc)
-                        scheduledChargeCycles = vehicleMask
-                        sessionStore.saveScheduledChargeCycles(session.selectedVin, vehicleMask)
-                    }
-                    parsed.chargeScheduleCirculation?.let { circ ->
-                        scheduledChargeCirculation = circ
-                        sessionStore.saveScheduledChargeCirculation(session.selectedVin, circ)
-                    }
-                    parsed.chargeScheduleRecharge?.let { rech ->
-                        scheduledChargeContinueUntilLimit = rech
-                        sessionStore.saveScheduledChargeContinueUntilLimit(session.selectedVin, rech)
-                    }
-                    parsed.chargeScheduleSocLimit?.let { socLimit ->
-                        healthyChargeLimitSoc = socLimit
-                        sessionStore.saveHealthyChargeLimit(session.selectedVin, socLimit)
+                    // 车端若返回了真实充电计划 (config.3)，非保护期内同步反显更新
+                    if (!chargingProtected) {
+                        parsed.chargeScheduleEnabled?.let { schedEnabled ->
+                            scheduledChargeEnabled = schedEnabled
+                            sessionStore.saveScheduledChargeEnabled(session.selectedVin, schedEnabled)
+                        }
+                        parsed.chargeScheduleStart?.let { start ->
+                            scheduledChargeStartTime = start
+                            sessionStore.saveScheduledChargeStartTime(session.selectedVin, start)
+                        }
+                        parsed.chargeScheduleEnd?.let { end ->
+                            scheduledChargeEndTime = end
+                            sessionStore.saveScheduledChargeEndTime(session.selectedVin, end)
+                        }
+                        parsed.chargeScheduleCycles?.let { cyc ->
+                            val vehicleMask = ChargePlanCyclesHelper.toVehicleMask(cyc)
+                            scheduledChargeCycles = vehicleMask
+                            sessionStore.saveScheduledChargeCycles(session.selectedVin, vehicleMask)
+                        }
+                        parsed.chargeScheduleCirculation?.let { circ ->
+                            scheduledChargeCirculation = circ
+                            sessionStore.saveScheduledChargeCirculation(session.selectedVin, circ)
+                        }
+                        parsed.chargeScheduleRecharge?.let { rech ->
+                            scheduledChargeContinueUntilLimit = rech
+                            sessionStore.saveScheduledChargeContinueUntilLimit(session.selectedVin, rech)
+                        }
+                        parsed.chargeScheduleSocLimit?.let { socLimit ->
+                            healthyChargeLimitSoc = socLimit
+                            sessionStore.saveHealthyChargeLimit(session.selectedVin, socLimit)
+                        }
                     }
                     if (!silent) {
                         statusError = ""
@@ -2843,6 +2918,13 @@ class MainActivity : ComponentActivity() {
     /** 统一整车控车极速阶梯早退轮询：实车信号达成即刻早退闭环 */
     private fun scheduleControlStatusRefreshes(commandName: String) {
         cancelPendingControlStatusRefreshes()
+        if (commandName.startsWith("fota")) {
+            mainHandler.postDelayed({
+                if (!activityDestroyed && loggedIn) {
+                    checkForVehicleOta(force = true)
+                }
+            }, 1_500L)
+        }
         val checkpoints = VehicleControlConfirmationPolicy.telemetryRefreshScheduleMs(commandName)
         checkpoints.forEach { delayMs ->
             val runnable = object : Runnable {

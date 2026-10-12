@@ -452,7 +452,7 @@ fun VehicleOtaCard(
                                             }
                                         }
                                     }
-                                    OtaStatus.DOWNLOADED -> {
+                                    OtaStatus.DOWNLOADED, OtaStatus.SCHEDULED -> {
                                         Row(
                                             modifier = Modifier.fillMaxWidth(),
                                             horizontalArrangement = Arrangement.spacedBy(8.dp)

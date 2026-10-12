@@ -1782,7 +1782,7 @@ class LeapmotorApi internal constructor(
                 val resp = http(url, method = "GET", headers = headers, query = signedQuery)
                 android.util.Log.i("LeapOtaDebug", "getVehicleOtaInfo GET url=$url, resp=$resp")
                 val code = resp.optInt("code", resp.optInt("result", -1))
-                val isSuccess = code == 0 || resp.optString("message") == "请求成功"
+                val isSuccess = code == 0 || code == 200 || resp.optString("message") == "请求成功" || resp.optString("msg").equals("success", ignoreCase = true)
                 if (isSuccess) {
                     val data = resp.optJSONObject("data")
                     return VehicleOtaInfo.fromJson(data, code.toString(), resp.optString("message"))
@@ -1800,7 +1800,7 @@ class LeapmotorApi internal constructor(
                 val resp = gatewayFetch(url, method = "POST", params = params, jsonBody = JSONObject(params))
                 android.util.Log.i("LeapOtaDebug", "getVehicleOtaInfo POST JSON url=$url, resp=$resp")
                 val code = resp.optInt("code", resp.optInt("result", -1))
-                val isSuccess = code == 0 || resp.optString("message") == "请求成功"
+                val isSuccess = code == 0 || code == 200 || resp.optString("message") == "请求成功" || resp.optString("msg").equals("success", ignoreCase = true)
                 if (isSuccess) {
                     val data = resp.optJSONObject("data")
                     return VehicleOtaInfo.fromJson(data, code.toString(), resp.optString("message"))
