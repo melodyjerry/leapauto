@@ -9603,9 +9603,10 @@ fun ClimateControlBottomSheet(
     controlFeedback: ControlFeedback? = null,
     onDismissControlFeedback: () -> Unit = {}
 ) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val coroutineScope = rememberCoroutineScope()
     val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
+    var showExtendedControls by remember { mutableStateOf(false) }
     // 解除全局 busy 锁定：只要有车辆数据，面板按键随时响应触控，实现极致跟手性
     val actionsEnabled = status != null
     val fanRange = hvacCapability.effectiveUiFanRange()
@@ -9764,15 +9765,14 @@ fun ClimateControlBottomSheet(
         BoxWithConstraints(
             modifier = Modifier.fillMaxWidth()
         ) {
-            val fullSheetHeight = maxHeight
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(fullSheetHeight)
+                    .heightIn(max = maxHeight)
             ) {
                 Column(
                     modifier = Modifier
-                        .fillMaxSize()
+                        .fillMaxWidth()
                         .padding(horizontal = 14.dp, vertical = 4.dp)
                         .verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(11.dp)
@@ -10162,56 +10162,106 @@ fun ClimateControlBottomSheet(
                         }
                     }
 
-                    // 出风方向
-                    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                            Text("出风方向", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text(
-                                if (editedOutletName == AirOutlet.ALL.name) "全车出风" else "前风挡出风",
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.primary
-                            )
+                // 5. 展开/收起 深度控制（出风方向与座椅舒适度）
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.glassInsetSurface,
+                    border = BorderStroke(
+                        0.6.dp,
+                        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
+                    ),
+                    shadowElevation = 0.dp,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable {
+                            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                            showExtendedControls = !showExtendedControls
                         }
-                        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                            SegmentedButton(
-                                selected = editedOutletName == AirOutlet.ALL.name,
-                                onClick = {
-                                    userLastActionEpochMs = System.currentTimeMillis()
-                                    optimisticAcSwitch = true
-                                    optimisticPresetName = null
-                                    editedOutletName = AirOutlet.ALL.name
-                                    editedDefogging = false
-                                    submitSettings(HvacOperation.ON, "已切换至全车出风")
-                                },
-                                shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
-                                icon = {},
-                                label = { Text("全车出风", style = MaterialTheme.typography.labelSmall) }
-                            )
-                            SegmentedButton(
-                                selected = editedOutletName == AirOutlet.WINDSHIELD.name,
-                                onClick = {
-                                    userLastActionEpochMs = System.currentTimeMillis()
-                                    optimisticAcSwitch = true
-                                    optimisticPresetName = ClimatePresetAction.WINDSHIELD_DEFROST.name
-                                    editedOutletName = AirOutlet.WINDSHIELD.name
-                                    editedDefogging = true
-                                    submitSettings(HvacOperation.ON, "前挡除霜已开启")
-                                },
-                            shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
-                            icon = {},
-                            label = { Text("前风挡出风", style = MaterialTheme.typography.labelSmall) }
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 10.dp, horizontal = 12.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = if (showExtendedControls) "收起更多设置" else "展开出风与座椅舒适",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Icon(
+                            painter = painterResource(R.drawable.ic_phosphor_caret_right),
+                            contentDescription = if (showExtendedControls) "收起" else "展开",
+                            modifier = Modifier
+                                .size(14.dp)
+                                .rotate(if (showExtendedControls) -90f else 90f),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
 
-                // 座椅舒适度控制卡片
-                SeatComfortControlCard(
-                    status = status,
-                    enabled = actionsEnabled,
-                    onControl = onControl,
-                    vehicleModel = vehicleModel
-                )
+                // 折叠区域：出风方向与座椅舒适度
+                AnimatedVisibility(visible = showExtendedControls) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        // 出风方向
+                        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                Text("出风方向", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(
+                                    if (editedOutletName == AirOutlet.ALL.name) "全车出风" else "前风挡出风",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                                SegmentedButton(
+                                    selected = editedOutletName == AirOutlet.ALL.name,
+                                    onClick = {
+                                        userLastActionEpochMs = System.currentTimeMillis()
+                                        optimisticAcSwitch = true
+                                        optimisticPresetName = null
+                                        editedOutletName = AirOutlet.ALL.name
+                                        editedDefogging = false
+                                        submitSettings(HvacOperation.ON, "已切换至全车出风")
+                                    },
+                                    shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
+                                    icon = {},
+                                    label = { Text("全车出风", style = MaterialTheme.typography.labelSmall) }
+                                )
+                                SegmentedButton(
+                                    selected = editedOutletName == AirOutlet.WINDSHIELD.name,
+                                    onClick = {
+                                        userLastActionEpochMs = System.currentTimeMillis()
+                                        optimisticAcSwitch = true
+                                        optimisticPresetName = ClimatePresetAction.WINDSHIELD_DEFROST.name
+                                        editedOutletName = AirOutlet.WINDSHIELD.name
+                                        editedDefogging = true
+                                        submitSettings(HvacOperation.ON, "前挡除霜已开启")
+                                    },
+                                    shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
+                                    icon = {},
+                                    label = { Text("前风挡出风", style = MaterialTheme.typography.labelSmall) }
+                                )
+                            }
+                        }
+
+                        // 座椅舒适度控制卡片
+                        SeatComfortControlCard(
+                            status = status,
+                            enabled = actionsEnabled,
+                            onControl = onControl,
+                            vehicleModel = vehicleModel
+                        )
+                    }
+                }
                 Spacer(Modifier.height(16.dp))
             }
         }

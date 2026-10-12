@@ -5,5 +5,5 @@ object AppReleaseInfo {
         get() = BuildConfig.VERSION_NAME
 
     // Update this text together with apkVersionName before each delivery package.
-    const val currentReleaseNotes = "1. 恢复车机系统 OTA 更新卡片与全套远控调度逻辑\n2. 支持查询车机固件版本、新固件日志、远程下载与夜间定时预约升级"
+    const val currentReleaseNotes = "1. 优化充电中心数据回显不及时问题\n2. 车辆系统OTA检测、预约安装等（不一定有用，可测试）"
 }

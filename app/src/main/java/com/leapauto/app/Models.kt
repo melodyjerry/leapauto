@@ -1555,7 +1555,9 @@ data class VehicleOtaInfo(
     val scheduledTime: String? = null,
     val rawJson: JSONObject? = null
 ) {
-    val isUpToDate: Boolean get() = status == OtaStatus.UP_TO_DATE || (!hasNewVersion && status != OtaStatus.DOWNLOADING && status != OtaStatus.DOWNLOADED)
+    val isUpToDate: Boolean get() =
+        status == OtaStatus.UP_TO_DATE ||
+        (!hasNewVersion && status != OtaStatus.DOWNLOADING && status != OtaStatus.DOWNLOADED && status != OtaStatus.INSTALLING && status != OtaStatus.FAILED)
     val isDownloading: Boolean get() = status == OtaStatus.DOWNLOADING
     val isDownloaded: Boolean get() = status == OtaStatus.DOWNLOADED
     val isInstalling: Boolean get() = status == OtaStatus.INSTALLING
@@ -1612,8 +1614,14 @@ data class VehicleOtaInfo(
                 data.optBoolean("hasUpdate", false) ||
                 (next.isNotBlank() && next != current && next != "--")
 
+            val scheduledTime = data.optString("scheduleTime")
+                .ifBlank { data.optString("scheduledTime") }
+                .ifBlank { data.optString("appointmentTime") }
+                .takeIf { it.isNotBlank() }
+
             val statusEnum = when {
                 rawStatus == 2 || (progress != null && progress in 1..99) -> OtaStatus.DOWNLOADING
+                rawStatus == 5 -> OtaStatus.SCHEDULED
                 rawStatus == 3 || progress == 100 -> OtaStatus.DOWNLOADED
                 rawStatus == 4 -> OtaStatus.INSTALLING
                 rawStatus == 6 -> OtaStatus.FAILED
@@ -1631,7 +1639,7 @@ data class VehicleOtaInfo(
                 packageSize = sizeStr,
                 status = statusEnum,
                 progressPercent = progress,
-                scheduledTime = data.optString("scheduleTime").ifBlank { data.optString("appointmentTime") }.takeIf { it.isNotBlank() },
+                scheduledTime = scheduledTime,
                 rawJson = data
             )
         }

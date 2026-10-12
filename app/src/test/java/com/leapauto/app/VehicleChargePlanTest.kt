@@ -74,4 +74,17 @@ class VehicleChargePlanTest {
         assertNull(VehicleChargePlan.fromConfig(JSONObject()))
         assertNull(VehicleChargePlan.fromConfig(JSONObject("""{"4": {"mac": "..."}}""")))
     }
+
+    @Test
+    fun chargePlanCyclesHelperRoundTripsVehicleMaskAndDaySet() {
+        val days = setOf(1, 2, 3, 4, 5) // 周一到周五
+        val mask = ChargePlanCyclesHelper.toVehicleMask(days)
+        val parsed = ChargePlanCyclesHelper.parseToDaySet(mask)
+        assertEquals(days, parsed)
+
+        val allDays = setOf(1, 2, 3, 4, 5, 6, 7)
+        val allMask = ChargePlanCyclesHelper.toVehicleMask(allDays)
+        assertEquals("1,1,1,1,1,1,1", allMask)
+        assertEquals(allDays, ChargePlanCyclesHelper.parseToDaySet(allMask))
+    }
 }

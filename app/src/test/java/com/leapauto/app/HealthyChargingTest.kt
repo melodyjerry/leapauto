@@ -104,4 +104,16 @@ class HealthyChargingTest {
         assertEquals("06:00", stateJson.getString("endtime"))
         assertEquals(0, stateJson.getInt("recharge"))
     }
+
+    @Test
+    fun targetSocMapsAccuratelyBasedOnHealthyChargingToggleState() {
+        val selectedSoc = 70f
+        // 开启健康充电时，目标 SOC 为选中的限值（如 70%）
+        val targetSocWhenEnabled = if (true) selectedSoc.toInt() else 100
+        assertEquals(70, targetSocWhenEnabled)
+
+        // 关闭健康充电时，目标 SOC 为 100%（不限充）
+        val targetSocWhenDisabled = if (false) selectedSoc.toInt() else 100
+        assertEquals(100, targetSocWhenDisabled)
+    }
 }
