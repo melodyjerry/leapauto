@@ -297,24 +297,33 @@
 
 ---
 
-### 接口 9：车辆外观图片与 3D 车模元数据
-* **URL**: `POST https://app-gw-global-master.leapmotor.com/carownerservice/vehicle/v1/carpicture/key`
-* **Form Body**: `vin={vin}&deviceID={deviceID}`
+### 接口 9：车辆外观图片与 3D 车模元数据（新旧双通道）
+* **最新 v3 URL**: `GET https://appgateway.leapmotor.com/carownerservice/v3/api/carpicture/3d/key`
+* **兼容旧版 URL**: `POST https://app-gw-global-master.leapmotor.com/carownerservice/vehicle/v1/carpicture/key`
+* **Query 参数**: `vin={vin}&deviceID={deviceID}&osVersion=136.0.7103.125&timespan={ts}&nonce={nonce}&signStr={signStr}`
+* **Header 参数**: 新网关 HMAC-SHA256 签名体系 (`x-api-signature-version=2.0`, `sign`, `token`, `timestamp`)
 * **Response 示例**:
   ```json
   {
     "code": 0,
+    "result": 0,
+    "message": "请求成功",
     "data": {
-      "h5Key": "3D-702ef381-d7ed-49cd-8d69-fad6f5f9f397",
+      "h5Key": "3D-a6d2ca11-8388-4371-a308-72b2d86482e4",
       "srcKey": "3D-d3e0fbce-0755-441e-8381-7512fd49bc70",
+      "h5Whole": "BG5gS2SQwHKC/5v2yDk/Ew==",
+      "srcWhole": "pqxd6vFtMpktN6IfOpw9wA==",
+      "modelVersion": null,
       "modelType": 3,
-      "shareBindUrl": "https://lp-carnet.oss-cn-hangzhou.aliyuncs.com/carModel3D/3D-2809d7c4.png",
       "modelParam": {
         "carType": "C16",
         "year": 2026,
         "carTypeCode": "630激光雷达智尊版 6座",
-        "colorCode": 3
-      }
+        "colorCode": 3,
+        "roofColor": null
+      },
+      "shareBindUrl": "http://lp-carnet.oss-cn-hangzhou.aliyuncs.com/carModel3D/3D-2809d7c4-7818-4308-8449-5f8998e1f197?Expires=4902605097&OSSAccessKeyId=LTAI4Fmo2WXExVH9PecXNnpy&Signature=9pdN6GG4pHsWXC%2BsCvqZ5JuMA7o%3D",
+      "currentTheme": null
     }
   }
   ```
@@ -329,6 +338,66 @@
   2. 通过 `downloadCarModelPackage(srcKey)` 下载该车型的高精模型、四轮贴图、车灯着色器，合并覆盖；
   3. 写入 `.ready` 标识，`CarModel3DView` 在 WebView 内部启动 `index.html` 渲染。
 * **客户端方法**: `CarModel3DManager.syncModelPackage(...)`
+
+---
+
+### 接口 10.1：车辆 3D 展台与小组件主题列表
+* **URL**: `POST https://appgateway.leapmotor.com/carownerservice/v3/api/theme/listThemeList`
+* **Request Headers**: 新网关签名头 (`x-api-signature-version: 2.0`, `sign`, `token`)
+* **JSON Body**: `{"vin": "{vin}"}`
+* **Response 示例**:
+  ```json
+  {
+    "code": 0,
+    "result": 0,
+    "message": "请求成功",
+    "data": {
+      "total": 4,
+      "list": [
+        {
+          "themeId": "7",
+          "themeCode": "20260920004",
+          "name": "雾川雪镜",
+          "description": "云雾缭绕的巍峨雪山与静谧冰河相映，宛如一幅空灵悠远的冬日水墨画卷。",
+          "tags": ["主题上新"],
+          "resource": {
+            "resourceBg": "http://lp-carnet.oss-cn-hangzhou.aliyuncs.com/.../bg.png",
+            "affiliatedResource": [
+              { "name": "首页", "preview": "...", "thumbnail": "..." },
+              { "name": "小组件", "preview": "...", "thumbnail": "..." }
+            ],
+            "resourcePkg": "http://lp-carnet.oss-cn-hangzhou.aliyuncs.com/.../resource - 雾川雪境.zip",
+            "resourcePkgName": "resource - 雾川雪境.zip",
+            "fileSize": 2199406,
+            "fileMd5": "e3a513f907c4df15b942d177dcf04547"
+          },
+          "status": "ONLINE",
+          "isDefault": false
+        }
+      ]
+    }
+  }
+  ```
+* **客户端方法**: `LeapmotorApi.listThemeList(...)` / `ThemeManager.loadCachedThemeList(...)`
+
+---
+
+### 接口 10.2：查询当前车辆最新生效主题
+* **URL**: `POST https://appgateway.leapmotor.com/carownerservice/v3/api/theme/latest`
+* **JSON Body**: `{"vin": "{vin}"}`
+* **客户端方法**: `LeapmotorApi.getLatestTheme(...)`
+
+---
+
+### 接口 10.3：主题资源包解压与皮肤规范
+* **资源包内部规范**:
+  ```text
+  resource/
+  ├── lpcar_pic_3d_bg.png        # 3D 展台专属背景贴图 (挂载至 WebView body 与 Three.js)
+  ├── lpcar_pic_widget_4x2.png   # 4x2 桌面小组件定制背景大图
+  └── lpcar_pic_widget_2x2.png   # 2x2 紧凑型桌面小组件定制背景大图
+  ```
+* **客户端管理类**: `ThemeManager.kt`
 
 ---
 

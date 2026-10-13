@@ -156,6 +156,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
@@ -240,6 +241,8 @@ import com.leapauto.app.SentryModeControlPolicy
 import com.leapauto.app.SessionExpiredDialogAction
 import com.leapauto.app.SessionExpiredDialogPolicy
 import com.leapauto.app.SessionStore
+import com.leapauto.app.ThemeManager
+import com.leapauto.app.LeapmotorApi
 import com.leapauto.app.CarModel3DManager
 import com.leapauto.app.TireStatus
 import com.leapauto.app.TrunkState
@@ -342,6 +345,8 @@ fun LeapAutoScreen(
     onWidgetBackgroundStyleChange: (Int) -> Unit = {},
     widgetOpacity: Int = SessionStore.WIDGET_OPACITY_OPAQUE,
     onWidgetOpacityChange: (Int) -> Unit = {},
+    selectedThemeId: String = ThemeManager.DEFAULT_THEME_ID,
+    onSelectedThemeChange: (String) -> Unit = {},
     appearanceMode: AppearanceMode,
     energyState: EnergyAnalyticsState = EnergyAnalyticsState.Idle,
     healthyChargeLimitSoc: Int = 80,
@@ -874,10 +879,7 @@ fun LeapAutoScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(
-                            top = effectiveHomeTopPadding,
-                            bottom = padding.calculateBottomPadding()
-                        )
+                        .padding(bottom = padding.calculateBottomPadding())
                         .graphicsLayer {
                             alpha = homeAlpha
                             translationX = if (destination == ScreenDestination.HOME || homeAlpha > 0.05f) 0f else -50000f
@@ -930,6 +932,7 @@ fun LeapAutoScreen(
                         onRetryDownload3D = onRetryDownload3D,
                         bluetoothState = bluetoothState,
                         bluetoothKeyFeatureEnabled = bluetoothKeyFeatureEnabled,
+                        selectedThemeId = selectedThemeId,
                         onOpenBluetoothKey = onOpenBluetoothKey
                     )
                 }
@@ -989,6 +992,8 @@ fun LeapAutoScreen(
                                 onWidgetBackgroundStyleChange = onWidgetBackgroundStyleChange,
                                 widgetOpacity = widgetOpacity,
                                 onWidgetOpacityChange = onWidgetOpacityChange,
+                                selectedThemeId = selectedThemeId,
+                                onSelectedThemeChange = onSelectedThemeChange,
                                 appearanceMode = appearanceMode,
                                 onAppearanceModeChange = onAppearanceModeChange,
                                 vehicleModel = vehicleModel,
@@ -1367,6 +1372,7 @@ private fun HomeContent(
     onRetryDownload3D: () -> Unit = {},
     bluetoothState: BleConnectionState = BleConnectionState(),
     bluetoothKeyFeatureEnabled: Boolean = false,
+    selectedThemeId: String = ThemeManager.DEFAULT_THEME_ID,
     onOpenBluetoothKey: (() -> Unit)? = null
 ) {
     var showAddressNavigationDialog by rememberSaveable { mutableStateOf(false) }
@@ -1406,21 +1412,21 @@ private fun HomeContent(
                     density = density.density,
                     minHeightDp = EnergyHomeCardPolicy.MIN_CARD_HEIGHT_DP
                 )
-                heightDp.dp
+                heightDp.coerceIn(180f, 205f).dp
             }
 
             Column(
                 Modifier
                     .fillMaxSize()
                     .verticalScroll(rememberScrollState())
-                    .padding(start = 12.dp, top = 4.dp, end = 12.dp, bottom = bottomPadding),
+                    .padding(bottom = bottomPadding),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Column(
+                // 1. 全幅无边框沉浸式展台（100% 满屏无左右白边，气势恢宏）
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .onSizeChanged { topContentHeightPx = it.height },
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                        .onSizeChanged { topContentHeightPx = it.height }
                 ) {
                     VehicleHero(
                         vehicleDisplayModel,
@@ -1437,6 +1443,7 @@ private fun HomeContent(
                             }
                         },
                         vehicleVin = vehicleVin,
+                        selectedThemeId = selectedThemeId,
                         vehicleImageVersion = vehicleImageVersion,
                         onControl = onControl,
                         onOpenHealthyCharging = onOpenHealthyCharging,
@@ -1454,7 +1461,15 @@ private fun HomeContent(
                         bluetoothKeyFeatureEnabled = bluetoothKeyFeatureEnabled,
                         onOpenBluetoothKey = onOpenBluetoothKey
                     )
+                }
 
+                // 2. 下方功能卡片容器（保留座舱 12dp 黄金边距）
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                     // 1. 胎压与车况状态卡片
                     Row(
                         Modifier.fillMaxWidth(),
@@ -1533,18 +1548,18 @@ private fun HomeContent(
                             modifier = Modifier.fillMaxWidth()
                         )
                     }
-                }
 
-                // 3. 底部能耗里程大卡片（保持在原本的最底部位置）
-                EnergyHomePagerCard(
-                    state = energyState,
-                    vehicleTotalMileage = status?.totalMileage,
-                    vehicleModel = vehicleDisplayModel.ifBlank { vehicleModel },
-                    seamless = false,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(dynamicCardHeight)
-                )
+                    // 3. 底部能耗里程大卡片
+                    EnergyHomePagerCard(
+                        state = energyState,
+                        vehicleTotalMileage = status?.totalMileage,
+                        vehicleModel = vehicleDisplayModel.ifBlank { vehicleModel },
+                        seamless = false,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(dynamicCardHeight)
+                    )
+                }
             }
         }
     }
@@ -1688,10 +1703,33 @@ private fun MyContent(
     onBluetoothKeyFeatureEnabledChange: (Boolean) -> Unit = {},
     onOpenBluetoothKey: (() -> Unit)? = null,
     onPowerTypeChange: (SessionStore.VehiclePowerType) -> Unit = {},
+    selectedThemeId: String = ThemeManager.DEFAULT_THEME_ID,
+    onSelectedThemeChange: (String) -> Unit = {},
     onLogout: () -> Unit = {}
 ) {
+    val context = LocalContext.current
     var showVehicleSelectorInAccount by remember { mutableStateOf(false) }
     var showBluetoothEnableWarningDialog by remember { mutableStateOf(false) }
+    var showProfileThemeDialog by remember { mutableStateOf(false) }
+    var profileThemeList by remember(vehicleVin) { mutableStateOf(ThemeManager.loadCachedThemeList(context)) }
+
+    androidx.compose.runtime.LaunchedEffect(vehicleVin) {
+        if (vehicleVin.isNotBlank()) {
+            val store = SessionStore(context)
+            val api = runCatching { LeapmotorApi(store.load()) }.getOrNull()
+            if (api != null) {
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    val remote = runCatching { api.listThemeList(vehicleVin) }.getOrNull()
+                    if (!remote.isNullOrEmpty()) {
+                        ThemeManager.saveThemeListCache(context, remote)
+                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                            profileThemeList = remote
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     Column(
         Modifier
@@ -1760,22 +1798,29 @@ private fun MyContent(
             onResetToDefault = onResetCustomVehicleImage
         )
 
-        // 2. 4X2桌面小组件
+        // 2. 3D 展台与小组件主题
+        ThemeConfigCard(
+            vin = vehicleVin,
+            selectedThemeId = selectedThemeId,
+            onOpenThemeDialog = { showProfileThemeDialog = true }
+        )
+
+        // 3. 4X2桌面小组件
         Widget4x2ActionsCard(
             actions = widget4x2Actions,
             onActionsChange = onWidget4x2ActionsChange
         )
 
-        // 3. 下拉控制中心快捷开关
+        // 4. 下拉控制中心快捷开关
         QuickSettingsTileCard()
 
-        // 4. 小组件背景风格 (经典微晶 / 官方山河)
+        // 5. 小组件背景风格 (经典微晶 / 官方山河)
         WidgetBackgroundStyleCard(
             style = widgetBackgroundStyle,
             onStyleChange = onWidgetBackgroundStyleChange
         )
 
-        // 4.1 小组件透明度 (仅当用户选择经典微晶皮肤时显示)
+        // 5.1 小组件透明度 (仅当用户选择经典微晶皮肤时显示)
         if (widgetBackgroundStyle == SessionStore.WIDGET_BG_STYLE_MICROCRYSTAL) {
             WidgetOpacityCard(
                 opacity = widgetOpacity,
@@ -1876,6 +1921,22 @@ private fun MyContent(
         LogoutButtonCard(onClick = onLogout)
 
         Spacer(Modifier.height(16.dp))
+    }
+
+    if (showProfileThemeDialog) {
+        val sessionStore = remember { SessionStore(context) }
+        val api = remember { runCatching { LeapmotorApi(sessionStore.load()) }.getOrNull() }
+        ThemeSelectorBottomSheet(
+            vin = vehicleVin,
+            currentThemeId = selectedThemeId,
+            themes = profileThemeList,
+            api = api,
+            onDismiss = { showProfileThemeDialog = false },
+            onThemeApplied = { newThemeId ->
+                onSelectedThemeChange(newThemeId)
+                showProfileThemeDialog = false
+            }
+        )
     }
 
     if (showVehicleSelectorInAccount && availableVehicles.size > 1) {
@@ -3288,6 +3349,83 @@ private fun Widget4x2ActionsCard(
 }
 
 @Composable
+private fun ThemeConfigCard(
+    vin: String,
+    selectedThemeId: String,
+    onOpenThemeDialog: () -> Unit
+) {
+    val context = LocalContext.current
+    val cachedThemes = ThemeManager.loadCachedThemeList(context)
+    val activeThemeName = cachedThemes.firstOrNull { it.themeId == selectedThemeId }?.name ?: "默认主题"
+
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .frostedGlassCard(shape = RoundedCornerShape(16.dp))
+            .clickable { onOpenThemeDialog() },
+        shape = RoundedCornerShape(16.dp),
+        color = Color.Transparent,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        border = glassCardBorder(),
+        shadowElevation = 0.dp
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(
+                modifier = Modifier.size(36.dp),
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_theme_palette),
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(8.dp)
+                )
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    "3D 展台与小组件主题",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    "个性化多套展车全景背景与组件皮肤",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(percent = 50),
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
+                ) {
+                    Text(
+                        activeThemeName,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+                Icon(
+                    painter = painterResource(R.drawable.ic_phosphor_caret_right),
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun WidgetBackgroundStyleCard(
     style: Int,
     onStyleChange: (Int) -> Unit
@@ -3925,6 +4063,7 @@ fun VehicleHero(
     liveWeather: com.leapauto.app.weather.LiveWeather? = null,
     onAddressClick: () -> Unit = {},
     vehicleVin: String = "",
+    selectedThemeId: String = ThemeManager.DEFAULT_THEME_ID,
     vehicleImageVersion: Int = 0,
     onControl: ((String) -> Unit)? = null,
     onOpenHealthyCharging: () -> Unit = {},
@@ -3961,6 +4100,27 @@ fun VehicleHero(
     var is3DLoadFailed by remember(h5Key, srcKey, vehicleImageVersion) { mutableStateOf(false) }
     var is3DTimedOut by remember(h5Key, srcKey, vehicleImageVersion) { mutableStateOf(false) }
     var prefer2DModel by remember(vehicleVin, vehicleImageVersion) { mutableStateOf(false) }
+    var themeList by remember(vehicleVin) {
+        mutableStateOf(ThemeManager.loadCachedThemeList(context))
+    }
+
+    androidx.compose.runtime.LaunchedEffect(vehicleVin) {
+        if (vehicleVin.isNotBlank()) {
+            val store = SessionStore(context)
+            val api = runCatching { LeapmotorApi(store.load()) }.getOrNull()
+            if (api != null) {
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    val remote = runCatching { api.listThemeList(vehicleVin) }.getOrNull()
+                    if (!remote.isNullOrEmpty()) {
+                        ThemeManager.saveThemeListCache(context, remote)
+                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                            themeList = remote
+                        }
+                    }
+                }
+            }
+        }
+    }
     val gear = status?.gearStatus?.trim()?.uppercase()
     val isDrivingGear = gear in setOf("D", "D挡", "DRIVE", "前进", "3", "R", "R挡", "REVERSE", "倒车", "1")
     val speedValue = status?.speed?.replace("km/h", "", ignoreCase = true)?.trim()?.toFloatOrNull() ?: 0f
@@ -4023,14 +4183,14 @@ fun VehicleHero(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(heroCardShape),
-        shape = heroCardShape,
+            .then(if (show3D) Modifier else Modifier.clip(heroCardShape)),
+        shape = if (show3D) RectangleShape else heroCardShape,
         color = Color.Transparent,
         contentColor = MaterialTheme.colorScheme.onSurface,
-        border = glassCardBorder(),
+        border = if (show3D) null else glassCardBorder(),
         shadowElevation = 0.dp
     ) {
-        Box(modifier = Modifier.fillMaxWidth().clip(heroCardShape)) {
+        Box(modifier = Modifier.fillMaxWidth().then(if (show3D) Modifier else Modifier.clip(heroCardShape))) {
             if (!show3D) {
                 // 真实毛玻璃折射层（全景微晶渐变基底 + 能量环境极光 + 展台漫反射）
                 androidx.compose.foundation.Canvas(modifier = Modifier.matchParentSize()) {
@@ -4109,6 +4269,19 @@ fun VehicleHero(
                         )
                 )
             } else {
+                // 0. 定制主题实景展台大图 (选用定制主题时，作为首卡沉浸式底衬)
+                val themeBgBitmap = remember(selectedThemeId) {
+                    ThemeManager.load3dBgBitmap(context, selectedThemeId)
+                }
+                if (themeBgBitmap != null && selectedThemeId != ThemeManager.DEFAULT_THEME_ID) {
+                    Image(
+                        bitmap = themeBgBitmap.asImageBitmap(),
+                        contentDescription = "主题展台背景",
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.matchParentSize()
+                    )
+                }
+
                 // 1. 3D 原厂 4K 全景天幕完全铺满整张首卡视口（浑然天成无任何画中画黑边断层）
                 val isDarkTheme = LocalAppDarkTheme.current
                 CarModel3DView(
@@ -4118,6 +4291,7 @@ fun VehicleHero(
                     vin = vehicleVin,
                     isCruising = isActuallyDriving,
                     isDark = isDarkTheme,
+                    themeId = selectedThemeId,
                     modifier = Modifier
                         .matchParentSize()
                         .layout { measurable, constraints ->
@@ -4133,7 +4307,6 @@ fun VehicleHero(
                                 placeable.placeRelative(0, -offsetPx)
                             }
                         }
-                        .clip(heroCardShape)
                         .graphicsLayer { alpha = modelAlpha },
                     onReady = {
                         is3DRendered = true
@@ -4151,7 +4324,6 @@ fun VehicleHero(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(130.dp)
-                        .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
                         .background(
                             Brush.verticalGradient(
                                 colors = listOf(
@@ -4163,26 +4335,23 @@ fun VehicleHero(
                         )
                 )
 
-                // 3. 底部地平线地雾消融层（从透明自然过渡到底色，杜绝生硬地表切线，柔和托起悬浮快捷按键）
+                // 3. 展台最下沿极窄微羽化过渡（仅 20dp 边缘衔接下方功能卡片，还原快捷操作区通透实景画卷）
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(140.dp)
+                        .height(20.dp)
                         .align(Alignment.BottomCenter)
                         .background(
                             Brush.verticalGradient(
-                                0.0f to Color.Transparent,
-                                0.25f to pageBg.copy(alpha = if (isDark) 0.15f else 0.10f),
-                                0.55f to pageBg.copy(alpha = if (isDark) 0.45f else 0.35f),
-                                0.80f to pageBg.copy(alpha = if (isDark) 0.75f else 0.65f),
-                                1.0f to pageBg.copy(alpha = if (isDark) 0.92f else 0.88f)
+                                colors = listOf(Color.Transparent, pageBg.copy(alpha = if (isDark) 0.45f else 0.35f))
                             )
                         )
                 )
             }
 
+            val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
             Column(
-                modifier = Modifier.padding(top = 10.dp, bottom = 0.dp),
+                modifier = Modifier.padding(top = statusBarTop + 6.dp, bottom = 0.dp),
                 verticalArrangement = Arrangement.spacedBy(0.dp)
             ) {
 
@@ -8743,9 +8912,9 @@ private fun EnergyMetricCard(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 6.dp, vertical = 10.dp),
+                .padding(horizontal = 6.dp, vertical = 8.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.SpaceBetween
+            verticalArrangement = Arrangement.Center
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -8766,10 +8935,12 @@ private fun EnergyMetricCard(
                 )
             }
 
+            Spacer(Modifier.height(8.dp))
+
             Text(
                 text = value,
-                fontSize = 17.sp,
-                lineHeight = 20.sp,
+                fontSize = 18.sp,
+                lineHeight = 22.sp,
                 fontWeight = FontWeight.Bold,
                 color = valueColor,
                 style = MaterialTheme.typography.titleMedium.energyStyle(),
@@ -8777,6 +8948,8 @@ private fun EnergyMetricCard(
                 softWrap = false,
                 overflow = TextOverflow.Ellipsis
             )
+
+            Spacer(Modifier.height(6.dp))
 
             Text(
                 text = unit,

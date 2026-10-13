@@ -693,7 +693,7 @@ class LeapmotorApi internal constructor(
             // 1a. 旧链路签名 GET（很多查询元数据接口为 GET）
             try {
                 val signed = oldSignedParams(
-                    params = mapOf("vin" to vin, "carvin" to vin, "deviceID" to session.deviceId),
+                    params = mapOf("vin" to vin, "carvin" to vin, "deviceID" to session.deviceId, "osVersion" to "136.0.7103.125"),
                     includeTimespan = true
                 )
                 val headers = combinedAppAndGatewayHeaders(signed, needLogin = true)
@@ -941,6 +941,98 @@ class LeapmotorApi internal constructor(
             }
         }
         return false
+    }
+
+    /**
+     * 查询当前车辆可用主题列表（包含 3D 背景图与小组件皮肤）。
+     * 端点: POST /carownerservice/v3/api/theme/listThemeList
+     */
+    fun listThemeList(vin: String = session.selectedVin): List<VehicleTheme> {
+        if (vin.isBlank()) return emptyList()
+        val url = "$DRIVING_RECORD_HOST/carownerservice/v3/api/theme/listThemeList"
+        val jsonBody = JSONObject().apply { put("vin", vin) }
+        val resp = gatewayFetch(
+            url = url,
+            method = "POST",
+            params = mapOf("vin" to vin),
+            jsonBody = jsonBody
+        )
+        val data = resp.optJSONObject("data") ?: return emptyList()
+        val listArray = data.optJSONArray("list") ?: return emptyList()
+        val themes = ArrayList<VehicleTheme>(listArray.length())
+        for (i in 0 until listArray.length()) {
+            val item = listArray.optJSONObject(i) ?: continue
+            themes.add(VehicleTheme.fromJson(item))
+        }
+        return themes
+    }
+
+    /**
+     * 查询当前车辆官方生效的最新主题。
+     * 端点: POST /carownerservice/v3/api/theme/latest
+     */
+    fun getLatestTheme(vin: String = session.selectedVin): VehicleTheme? {
+        if (vin.isBlank()) return null
+        val url = "$DRIVING_RECORD_HOST/carownerservice/v3/api/theme/latest"
+        val jsonBody = JSONObject().apply { put("vin", vin) }
+        val resp = gatewayFetch(
+            url = url,
+            method = "POST",
+            params = mapOf("vin" to vin),
+            jsonBody = jsonBody
+        )
+        val data = resp.optJSONObject("data") ?: return null
+        return VehicleTheme.fromJson(data)
+    }
+
+    /**
+     * 下载主题资源包并安全解压至目标目录 [destDir]。
+     */
+    fun downloadThemePackage(pkgUrl: String, destDir: File, expectedMd5: String? = null): Boolean {
+        if (pkgUrl.isBlank()) return false
+        destDir.mkdirs()
+        val canonicalDest = destDir.canonicalFile
+        val request = Request.Builder()
+            .url(pkgUrl)
+            .get()
+            .build()
+        val client = NetworkDebugController.httpClient()
+        return runCatching {
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) return@use false
+                val bytes = response.body?.bytes() ?: return@use false
+                if (bytes.size < 4 || bytes[0] != 0x50.toByte() || bytes[1] != 0x4B.toByte()) {
+                    return@use false
+                }
+                if (!expectedMd5.isNullOrBlank()) {
+                    val md5Digest = java.security.MessageDigest.getInstance("MD5")
+                    val actualMd5 = md5Digest.digest(bytes).joinToString("") { "%02x".format(it) }
+                    if (!actualMd5.equals(expectedMd5.trim(), ignoreCase = true)) {
+                        android.util.Log.w("ThemeDownload", "MD5 校验不匹配: 期望=$expectedMd5, 实际=$actualMd5")
+                        return@use false
+                    }
+                }
+                ZipInputStream(java.io.ByteArrayInputStream(bytes)).use { zis ->
+                    while (true) {
+                        val entry = zis.nextEntry ?: break
+                        val targetFile = File(canonicalDest, entry.name).canonicalFile
+                        if (!targetFile.path.startsWith(canonicalDest.path + File.separator)) {
+                            throw IOException("Zip traversal entry rejected: ${entry.name}")
+                        }
+                        if (entry.isDirectory) {
+                            targetFile.mkdirs()
+                        } else {
+                            targetFile.parentFile?.mkdirs()
+                            FileOutputStream(targetFile).use { fos ->
+                                zis.copyTo(fos)
+                            }
+                        }
+                        zis.closeEntry()
+                    }
+                }
+                true
+            }
+        }.getOrDefault(false)
     }
 
     /**

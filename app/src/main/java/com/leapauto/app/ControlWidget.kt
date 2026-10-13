@@ -863,8 +863,20 @@ class ControlWidget : AppWidgetProvider() {
             return SessionStore(context).loadAppearanceMode().resolvesToDark(systemDark)
         }
 
+        internal fun widgetEffectiveDarkTheme(context: Context, activeThemeId: String = ""): Boolean {
+            val resolvedThemeId = if (activeThemeId.isNotBlank()) activeThemeId else {
+                val vin = SessionStore(context).load().selectedVin
+                ThemeManager.getActiveThemeId(context, vin)
+            }
+            return when (ThemeManager.getThemeTone(resolvedThemeId)) {
+                ThemeManager.ThemeTone.LIGHT -> false // 高亮雪景等主题，强制浅底深色字
+                ThemeManager.ThemeTone.DARK -> true   // 暮色石筑等主题，强制深底纯白字
+                ThemeManager.ThemeTone.AUTO -> widgetUsesDarkAppearance(context)
+            }
+        }
+
         internal fun widgetThemeContext(context: Context): Context {
-            val darkTheme = widgetUsesDarkAppearance(context)
+            val darkTheme = widgetEffectiveDarkTheme(context)
             val configuration = Configuration(context.resources.configuration).apply {
                 uiMode = uiMode and Configuration.UI_MODE_NIGHT_MASK.inv() or
                     if (darkTheme) Configuration.UI_MODE_NIGHT_YES else Configuration.UI_MODE_NIGHT_NO
@@ -919,8 +931,20 @@ class ControlWidget : AppWidgetProvider() {
         }
 
         private fun applyWidgetBackground(context: Context, views: RemoteViews, darkTheme: Boolean) {
-            val bgRes = resolveWidgetCardBackground(context, darkTheme)
-            views.setImageViewResource(R.id.widgetBackgroundImg, bgRes)
+            val store = SessionStore(context)
+            val session = store.load()
+            val vin = session.selectedVin
+            val activeThemeId = ThemeManager.getActiveThemeId(context, vin)
+            val themeBgBitmap = if (activeThemeId != ThemeManager.DEFAULT_THEME_ID) {
+                ThemeManager.loadWidgetBgBitmap(context, activeThemeId, is4x2 = true, darkTheme = darkTheme)
+            } else null
+
+            if (themeBgBitmap != null) {
+                views.setImageViewBitmap(R.id.widgetBackgroundImg, themeBgBitmap)
+            } else {
+                val bgRes = resolveWidgetCardBackground(context, darkTheme)
+                views.setImageViewResource(R.id.widgetBackgroundImg, bgRes)
+            }
             views.setInt(R.id.widgetRoot, "setBackgroundResource", 0)
         }
 

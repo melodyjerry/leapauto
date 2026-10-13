@@ -5,5 +5,5 @@ object AppReleaseInfo {
         get() = BuildConfig.VERSION_NAME
 
     // Update this text together with apkVersionName before each delivery package.
-    const val currentReleaseNotes = "1. 优化充电中心数据回显不及时问题\n2. 车辆系统OTA检测、预约安装等（不一定有用，可测试）"
+    const val currentReleaseNotes = "1. 优化能耗里程卡片自适应算法，设置 180~205dp 黄金比例高度门禁\n2. 重构指标竖卡内部布局，改为居中凝聚排列，彻底消除长条空旷感"
 }

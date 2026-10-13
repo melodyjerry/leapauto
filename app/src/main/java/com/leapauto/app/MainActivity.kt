@@ -28,6 +28,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.leapauto.app.ui.LeapAutoScreen
+import com.leapauto.app.ThemeManager
 import com.leapauto.app.ui.BluetoothKeyDialog
 import com.leapauto.app.ui.BluetoothActionConfirmation
 import com.leapauto.app.ui.BluetoothConfigurationConfirmation
@@ -272,6 +273,7 @@ class MainActivity : ComponentActivity() {
     private var showSessionExpiredDialog by mutableStateOf(false)
     private var availableVehicles by mutableStateOf<List<Vehicle>>(emptyList())
     private var vehicleImageVersion by mutableIntStateOf(0)
+    private var selectedThemeId by mutableStateOf(ThemeManager.DEFAULT_THEME_ID)
     private var activeGeetestChallenge by mutableStateOf<GeetestChallenge?>(null)
     private lateinit var bluetoothKeyController: BluetoothKeyController
     private lateinit var bluetoothRuntime: BleKeyRuntime
@@ -380,6 +382,7 @@ class MainActivity : ComponentActivity() {
         widget4x2Actions = sessionStore.loadWidget4x2Actions()
         widgetBackgroundStyle = sessionStore.loadWidgetBackgroundStyle()
         widgetOpacity = sessionStore.loadWidgetOpacity()
+        selectedThemeId = ThemeManager.getActiveThemeId(this, session.selectedVin)
         appearanceMode = AppearanceMode.SYSTEM
         if (sessionStore.loadAppearanceMode() != AppearanceMode.SYSTEM) {
             sessionStore.saveAppearanceMode(AppearanceMode.SYSTEM)
@@ -418,6 +421,8 @@ class MainActivity : ComponentActivity() {
                     vehicleAddress = vehicleAddress,
                     liveWeather = liveWeather,
                     vehicleVin = session.selectedVin,
+                    selectedThemeId = selectedThemeId,
+                    onSelectedThemeChange = ::updateSelectedTheme,
                     statusError = statusError,
                     controlFeedback = controlFeedback,
                     activeControlCommand = activeControlCommandName,
@@ -600,6 +605,12 @@ class MainActivity : ComponentActivity() {
         appearanceMode = mode
         sessionStore.saveAppearanceMode(mode)
         ControlWidget.refreshAppearance(this)
+    }
+
+    private fun updateSelectedTheme(themeId: String) {
+        selectedThemeId = themeId
+        ThemeManager.setActiveThemeId(this, session.selectedVin, themeId)
+        ControlWidget.refreshData(this)
     }
 
     private fun updateBluetoothKeyFeatureEnabled(enabled: Boolean) {
@@ -2782,6 +2793,7 @@ class MainActivity : ComponentActivity() {
         scheduledPreheatEnabled = sessionStore.loadScheduledPreheatEnabled(target.vin)
         scheduledPreheatStartTime = sessionStore.loadScheduledPreheatStartTime(target.vin)
         scheduledPreheatDays = sessionStore.loadScheduledPreheatDays(target.vin)
+        selectedThemeId = ThemeManager.getActiveThemeId(this, target.vin)
 
         status = null
         statusError = ""

@@ -30,8 +30,18 @@ class CompactControlWidget : AppWidgetProvider() {
                     config,
                     snapshot?.carType ?: session.selectedCarType
                 )
-                val bgRes = ControlWidget.resolveWidgetCardBackground(context, darkTheme)
-                setImageViewResource(R.id.compactWidgetBackgroundImg, bgRes)
+                val vin = session.selectedVin
+                val activeThemeId = ThemeManager.getActiveThemeId(context, vin)
+                val themeBgBitmap = if (activeThemeId != ThemeManager.DEFAULT_THEME_ID) {
+                    ThemeManager.loadWidgetBgBitmap(context, activeThemeId, is4x2 = false, darkTheme = darkTheme)
+                } else null
+
+                if (themeBgBitmap != null) {
+                    setImageViewBitmap(R.id.compactWidgetBackgroundImg, themeBgBitmap)
+                } else {
+                    val bgRes = ControlWidget.resolveWidgetCardBackground(context, darkTheme)
+                    setImageViewResource(R.id.compactWidgetBackgroundImg, bgRes)
+                }
                 setInt(R.id.compactWidgetRoot, "setBackgroundResource", 0)
                 setVehicleImage(this, appearance, session.selectedVin, context)
                 applyStaticAppearance(themeContext, this)

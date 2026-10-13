@@ -22,6 +22,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import com.leapauto.app.CarModel3DManager
 import com.leapauto.app.CompactControlWidget
 import com.leapauto.app.ControlWidget
+import com.leapauto.app.ThemeManager
 import com.leapauto.app.TrunkState
 import com.leapauto.app.VehicleImageCache
 import com.leapauto.app.VehicleStatus
@@ -43,6 +44,7 @@ fun CarModel3DView(
     vin: String = "",
     isCruising: Boolean = false,
     isDark: Boolean = true,
+    themeId: String = ThemeManager.DEFAULT_THEME_ID,
     modifier: Modifier = Modifier,
     onReady: () -> Unit = {},
     onError: () -> Unit = {},
@@ -57,11 +59,11 @@ fun CarModel3DView(
         modifier = modifier,
         factory = { ctx ->
             val actualModelDir = CarModel3DManager.getModelDir(ctx, h5Key)
-            CarModelWebView(ctx, actualModelDir, h5Key, modelParam, status, vin, isCruising, isDark, onReady, onError, onCarClick)
+            CarModelWebView(ctx, actualModelDir, h5Key, modelParam, status, vin, isCruising, isDark, themeId, onReady, onError, onCarClick)
         },
         update = { webView ->
             webView.onCarClick = onCarClick
-            webView.updateVehicleState(status, cruising = isCruising, isDark = isDark)
+            webView.updateVehicleState(status, cruising = isCruising, isDark = isDark, themeId = themeId)
         }
     )
 }
@@ -76,6 +78,7 @@ internal class CarModelWebView(
     private val vin: String,
     private var lastCruising: Boolean = false,
     private var lastDark: Boolean = true,
+    private var lastThemeId: String = ThemeManager.DEFAULT_THEME_ID,
     private val onReady: () -> Unit,
     private val onError: () -> Unit,
     var onCarClick: (() -> Unit)? = null
@@ -120,6 +123,24 @@ internal class CarModelWebView(
                 }
                 val rawPath = url.path?.removePrefix("/") ?: return null
                 val decodedPath = try { Uri.decode(rawPath) } catch (_: Exception) { rawPath }
+                if (decodedPath.startsWith("theme/", ignoreCase = true)) {
+                    var bgFile = ThemeManager.get3dBgFile(context, lastThemeId)
+                    if (bgFile == null || !bgFile.exists() || bgFile.length() == 0L) {
+                        val themeObj = ThemeManager.loadCachedThemeList(context).find { it.themeId == lastThemeId }
+                            ?: ThemeManager.PRESET_THEMES.find { it.themeId == lastThemeId }
+                        if (themeObj != null) {
+                            ThemeManager.ensure3dBgDownloaded(context, themeObj)
+                            bgFile = ThemeManager.get3dBgFile(context, lastThemeId)
+                        }
+                    }
+                    if (bgFile != null && bgFile.exists() && bgFile.length() > 0L) {
+                        return try {
+                            WebResourceResponse("image/png", "UTF-8", FileInputStream(bgFile))
+                        } catch (_: Exception) {
+                            null
+                        }
+                    }
+                }
                 val targetFile = File(modelDir, decodedPath).canonicalFile
                 val file = if (targetFile.exists() && targetFile.isFile) {
                     targetFile
@@ -198,6 +219,10 @@ internal class CarModelWebView(
                         """.trimIndent()
                         val patchedJs = mtkPrefix + "\n" + originalJs
                             .replace(
+                                "generateCar_viewer.frameState.skyBox=C,generateCar_viewer.scene.add(C)",
+                                "generateCar_viewer.frameState.skyBox=C,(\"default\"===_?generateCar_viewer.scene.add(C):0)"
+                            )
+                            .replace(
                                 "if(e.name===t)return e;",
                                 "if(e.name&&(e.name===t||e.name.toLowerCase().replaceAll(\".\",\"\").replaceAll(\" \",\"\")===t))return e;"
                             )
@@ -267,7 +292,7 @@ internal class CarModelWebView(
                             onReady()
                             tuneViewer(view)
                             view?.postDelayed({
-                                lastStatus?.let { updateVehicleState(it, forceImmediately = true) }
+                                updateVehicleState(lastStatus, forceImmediately = true)
                             }, 500)
                             // 兜底防线：若极少数特殊老车型资产未发送 onFullCarLoaded，延时 3.5 秒安全截取
                             view?.postDelayed({
@@ -283,7 +308,7 @@ internal class CarModelWebView(
                         view?.postDelayed({ tuneViewer(view) }, 200)
                         view?.postDelayed({
                             tuneViewer(view)
-                            lastStatus?.let { updateVehicleState(it, forceImmediately = true) }
+                            updateVehicleState(lastStatus, forceImmediately = true)
                             capture3DSnapshot(view)
                         }, 400)
                     }
@@ -307,19 +332,34 @@ internal class CarModelWebView(
         loadUrl("https://$ASSETS_HOST/index.html")
     }
 
-    fun updateVehicleState(status: VehicleStatus?, forceImmediately: Boolean = false, cruising: Boolean = lastCruising, isDark: Boolean = lastDark) {
+    fun updateVehicleState(
+        status: VehicleStatus?,
+        forceImmediately: Boolean = false,
+        cruising: Boolean = lastCruising,
+        isDark: Boolean = lastDark,
+        themeId: String = lastThemeId
+    ) {
+        val themeChanged = themeId != lastThemeId
         lastStatus = status
         lastCruising = cruising
         lastDark = isDark
+        lastThemeId = themeId
         if (!isSceneReady) return
-        val immediately = forceImmediately || !hasAppliedInitialState
+        val immediately = forceImmediately || !hasAppliedInitialState || themeChanged
         hasAppliedInitialState = true
-        val stateJson = buildStateJson(status, immediately, cruising, isDark)
+        val stateJson = buildStateJson(status, immediately, cruising, isDark, themeId)
         injectStateScript(stateJson)
     }
 
-    internal fun buildStateJson(status: VehicleStatus?, immediately: Boolean = false, cruising: Boolean = false, isDark: Boolean = true): String {
+    internal fun buildStateJson(
+        status: VehicleStatus?,
+        immediately: Boolean = false,
+        cruising: Boolean = false,
+        isDark: Boolean = true,
+        themeId: String = lastThemeId
+    ): String {
         val obj = JSONObject()
+        obj.put("themeId", themeId)
         val doorFl = if (status?.driverDoorOpen == true) 1 else 0
         val doorFr = if (status?.passengerDoorOpen == true) 1 else 0
         val doorRl = if (status?.leftRearDoorOpen == true) 1 else 0
@@ -610,14 +650,40 @@ internal class CarModelWebView(
                         c.handleVehicleMove(speed);
                     }
 
-                    // 7. 同步官方 3D 全景天幕日夜模式 (深色模式星空夜景，浅色模式日光晴空)
+                    // 7. 同步定制主题纯透明透光或恢复官方 3D 原厂天空盒
                     var skyBox = (v && v.frameState && v.frameState.skyBox) || (window.viewer && window.viewer.frameState && window.viewer.frameState.skyBox);
-                    if (skyBox) {
-                        skyBox.visible = true;
-                        if (imm && typeof skyBox.setDayOrNightImmediately === 'function') {
-                            skyBox.setDayOrNightImmediately(isDark ? 1.0 : 0.0);
-                        } else if (typeof skyBox.setDayOrNight === 'function') {
-                            skyBox.setDayOrNight(isDark);
+                    var tid = String(state.themeId || '4');
+                    if (tid !== '4') {
+                        if (skyBox) {
+                            skyBox.visible = false;
+                            if (skyBox.parent) skyBox.parent.remove(skyBox);
+                        }
+                        if (v && v.frameState) {
+                            if (v.frameState.skyBox) {
+                                v.frameState.skyBox.visible = false;
+                                if (v.frameState.skyBox.parent) v.frameState.skyBox.parent.remove(v.frameState.skyBox);
+                            }
+                            if (v.frameState.bg2D) {
+                                v.frameState.bg2D.visible = false;
+                                if (v.frameState.bg2D.parent) v.frameState.bg2D.parent.remove(v.frameState.bg2D);
+                            }
+                        }
+                        if (v && v.scene) v.scene.background = null;
+                        if (v && v.renderer) {
+                            v.renderer.setClearColor(0x000000, 0);
+                            v.renderer.setClearAlpha(0);
+                        }
+                    } else {
+                        if (v && v.frameState && v.frameState.bg2D) {
+                            v.frameState.bg2D.visible = false;
+                        }
+                        if (skyBox) {
+                            skyBox.visible = true;
+                            if (imm && typeof skyBox.setDayOrNightImmediately === 'function') {
+                                skyBox.setDayOrNightImmediately(isDark ? 1.0 : 0.0);
+                            } else if (typeof skyBox.setDayOrNight === 'function') {
+                                skyBox.setDayOrNight(isDark);
+                            }
                         }
                     }
 
@@ -707,6 +773,9 @@ internal class CarModelWebView(
         obj.put("rudder", rudder)
         obj.put("radius", 7.2)
         obj.put("offset", 0.0)
+        val isCustomTheme = lastThemeId != ThemeManager.DEFAULT_THEME_ID && lastThemeId.isNotBlank()
+        val themeParam = if (isCustomTheme) "https://$ASSETS_HOST/theme/3d_bg.png?t=$lastThemeId" else "default"
+        obj.put("theme", themeParam)
 
         if (param != null) {
             if (param.has("roofColor") && !param.isNull("roofColor")) {
@@ -773,23 +842,58 @@ internal class CarModelWebView(
             var v = window.viewer;
             if (!v) return;
 
-            // 1. 隐藏多余地面遮罩网格，保留车身、车道线与官方 3D 全景天空盒
+            // 1. 整理场景网格：保留车身、车道线与车灯，在定制主题下点亮 Bg2D 展台画卷并切除天空盒
             if (v.scene) {
+                var tid = '$lastThemeId';
                 v.scene.children.forEach(function(c) {
-                    if (c.isMesh) {
+                    if (c.isMesh || c.isSprite) {
                         var isLane = (window.car && c === window.car.__laneLine__) ||
                                      (c.material && c.material.uniforms && c.material.uniforms.loopTilingOffset);
                         var isSky = (v.frameState && c === v.frameState.skyBox) ||
-                                    (c.material && c.material.uniforms && (c.material.uniforms.dayTexture || c.material.uniforms.nightTexture));
+                                    (c.material && c.material.uniforms && (c.material.uniforms.dayTexture || c.material.uniforms.nightTexture)) ||
+                                    (c.name && c.name.toLowerCase().indexOf("sky") >= 0);
+                        var isBg2D = (v.frameState && c === v.frameState.bg2D) ||
+                                     (c.isSprite) ||
+                                     (c.material && c.material.isSpriteMaterial);
                         var isCharger = (window.car && c === window.car.__charger__) ||
                                         (c.name && c.name.toLowerCase().indexOf("charger") >= 0);
                         var isLight = (c.name && (c.name.toLowerCase().indexOf("light") >= 0 || c.name.toLowerCase().indexOf("beam") >= 0 || c.name.toLowerCase().indexOf("lamp") >= 0));
-                        if (!isLane && !isSky && !isCharger && !isLight) {
-                            c.visible = false;
+                        var isShadow = (window.carShadow && c === window.carShadow) ||
+                                       (c.name && c.name.toLowerCase().indexOf("shadow") >= 0) ||
+                                       (c.material && (c.material.isCarShadowMaterial || (c.material.uniforms && (c.material.uniforms.mainMap || c.material.uniforms.shadowMainMap))));
+
+                        if (tid !== '4') {
+                            if (isSky) {
+                                c.visible = false;
+                                if (c.parent) c.parent.remove(c);
+                            } else if (isBg2D) {
+                                c.visible = false;
+                                if (c.parent) c.parent.remove(c);
+                            } else if (isShadow) {
+                                c.visible = true;
+                            } else if (!isLane && !isCharger && !isLight) {
+                                c.visible = false;
+                            }
+                        } else {
+                            if (isBg2D) {
+                                c.visible = false;
+                            } else if (isSky) {
+                                c.visible = true;
+                            } else if (isShadow) {
+                                c.visible = true;
+                            } else if (!isLane && !isCharger && !isLight) {
+                                c.visible = false;
+                            }
                         }
                     }
                 });
-                // 官方 3D 全景天幕已激活，保留原生天空盒渲染，不再执行 v.scene.background = null
+                if (tid !== '4') {
+                    if (v.frameState) {
+                        if (v.frameState.skyBox) v.frameState.skyBox.visible = false;
+                        if (v.frameState.bg2D) v.frameState.bg2D.visible = true;
+                    }
+                    v.scene.background = null;
+                }
             }
 
             // 2. 保证 WebGL 画布与 HTML 背景绝对透明

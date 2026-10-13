@@ -167,8 +167,87 @@ data class VehiclePictureMeta(
     val srcKey: String?
         get() = rawData?.optString("srcKey")?.takeIf { it.isNotBlank() }
 
+    val h5Whole: String?
+        get() = rawData?.optString("h5Whole")?.takeIf { it.isNotBlank() }
+
+    val srcWhole: String?
+        get() = rawData?.optString("srcWhole")?.takeIf { it.isNotBlank() }
+
     val modelParam: JSONObject?
         get() = rawData?.optJSONObject("modelParam")
+
+    val currentTheme: VehicleTheme?
+        get() = rawData?.optJSONObject("currentTheme")?.let { VehicleTheme.fromJson(it) }
+}
+
+/** 3D 车模及小组件主题配置。 */
+data class VehicleTheme(
+    val themeId: String,
+    val themeCode: String,
+    val name: String,
+    val description: String,
+    val tags: List<String> = emptyList(),
+    val isDefault: Boolean = false,
+    val resourceBg: String? = null,
+    val resourcePkg: String? = null,
+    val resourcePkgName: String? = null,
+    val fileSize: Long? = null,
+    val fileMd5: String? = null,
+    val homePreview: String? = null,
+    val homeThumbnail: String? = null,
+    val widgetPreview: String? = null,
+    val widgetThumbnail: String? = null,
+    val rawData: JSONObject? = null
+) {
+    companion object {
+        fun fromJson(json: JSONObject): VehicleTheme {
+            val resObj = json.optJSONObject("resource")
+            val affiliatedList = resObj?.optJSONArray("affiliatedResource")
+            var homePrev: String? = null
+            var homeThumb: String? = null
+            var widgetPrev: String? = null
+            var widgetThumb: String? = null
+            if (affiliatedList != null) {
+                for (i in 0 until affiliatedList.length()) {
+                    val item = affiliatedList.optJSONObject(i) ?: continue
+                    val itemName = item.optString("name")
+                    if (itemName.contains("首页")) {
+                        homePrev = item.optString("preview").takeIf { it.isNotBlank() }
+                        homeThumb = item.optString("thumbnail").takeIf { it.isNotBlank() }
+                    } else if (itemName.contains("组件")) {
+                        widgetPrev = item.optString("preview").takeIf { it.isNotBlank() }
+                        widgetThumb = item.optString("thumbnail").takeIf { it.isNotBlank() }
+                    }
+                }
+            }
+            val tagArray = json.optJSONArray("tags")
+            val tags = mutableListOf<String>()
+            if (tagArray != null) {
+                for (i in 0 until tagArray.length()) {
+                    val t = tagArray.optString(i)
+                    if (t.isNotBlank()) tags.add(t)
+                }
+            }
+            return VehicleTheme(
+                themeId = json.optString("themeId"),
+                themeCode = json.optString("themeCode"),
+                name = json.optString("name"),
+                description = json.optString("description"),
+                tags = tags,
+                isDefault = json.optBoolean("isDefault", false),
+                resourceBg = resObj?.optString("resourceBg")?.takeIf { it.isNotBlank() },
+                resourcePkg = resObj?.optString("resourcePkg")?.takeIf { it.isNotBlank() },
+                resourcePkgName = resObj?.optString("resourcePkgName")?.takeIf { it.isNotBlank() },
+                fileSize = if (resObj != null && resObj.has("fileSize") && !resObj.isNull("fileSize")) resObj.optLong("fileSize") else null,
+                fileMd5 = resObj?.optString("fileMd5")?.takeIf { it.isNotBlank() },
+                homePreview = homePrev,
+                homeThumbnail = homeThumb,
+                widgetPreview = widgetPrev,
+                widgetThumbnail = widgetThumb,
+                rawData = json
+            )
+        }
+    }
 }
 
 /** 登录会话（内存态），由 SessionStore 持久化。 */

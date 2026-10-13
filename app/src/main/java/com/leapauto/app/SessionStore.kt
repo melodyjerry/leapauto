@@ -956,7 +956,31 @@ class SessionStore(context: Context) {
         }
     }
 
+    fun loadSelectedThemeId(vin: String): String? {
+        val safeVin = vin.replace(Regex("[^A-Za-z0-9]"), "_")
+        val perVin = if (safeVin.isNotBlank()) {
+            appPrefs.getString("$SELECTED_THEME_ID_PREFIX$safeVin", null)?.takeIf { it.isNotBlank() }
+        } else null
+        return perVin ?: appPrefs.getString(SELECTED_THEME_ID_GLOBAL, null)?.takeIf { it.isNotBlank() }
+    }
+
+    fun saveSelectedThemeId(vin: String, themeId: String?) {
+        val safeVin = vin.replace(Regex("[^A-Za-z0-9]"), "_")
+        val editor = appPrefs.edit()
+        if (themeId.isNullOrBlank()) {
+            if (safeVin.isNotBlank()) editor.remove("$SELECTED_THEME_ID_PREFIX$safeVin")
+            editor.remove(SELECTED_THEME_ID_GLOBAL)
+        } else {
+            val clean = themeId.trim()
+            if (safeVin.isNotBlank()) editor.putString("$SELECTED_THEME_ID_PREFIX$safeVin", clean)
+            editor.putString(SELECTED_THEME_ID_GLOBAL, clean)
+        }
+        editor.apply()
+    }
+
     companion object {
+        const val SELECTED_THEME_ID_PREFIX = "selected_theme_id_"
+        const val SELECTED_THEME_ID_GLOBAL = "selected_theme_id_global"
         val WIDGET_OPACITY_OPTIONS = listOf(100, 75, 50, 25)
         const val WIDGET_OPACITY_OPAQUE = 100
         const val WIDGET_OPACITY = "widget_opacity"
