@@ -63,6 +63,12 @@ class ThemeManagerTest {
         val foundDirect = ThemeManager.findThemeFile(themeDir, "direct_bg.png")
         assertNotNull(foundDirect)
         assertEquals(directFile.absolutePath, foundDirect?.absolutePath)
+
+        // Case 3: Priority - resource subfolder takes precedence over small root file
+        val rootSmall = File(themeDir, "lpcar_pic_3d_bg.png").apply { writeText("small_blurred_thumb") }
+        val foundPreferSub = ThemeManager.findThemeFile(themeDir, "lpcar_pic_3d_bg.png")
+        assertNotNull(foundPreferSub)
+        assertEquals(subFile.absolutePath, foundPreferSub?.absolutePath)
     }
 
     @Test

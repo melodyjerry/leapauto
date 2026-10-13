@@ -382,7 +382,25 @@ class MainActivity : ComponentActivity() {
         widget4x2Actions = sessionStore.loadWidget4x2Actions()
         widgetBackgroundStyle = sessionStore.loadWidgetBackgroundStyle()
         widgetOpacity = sessionStore.loadWidgetOpacity()
+        ThemeManager.cleanInvalidBlurredCache(this)
         selectedThemeId = ThemeManager.getActiveThemeId(this, session.selectedVin)
+        if (selectedThemeId != ThemeManager.DEFAULT_THEME_ID) {
+            if (!ThemeManager.isThemeReady(this, selectedThemeId)) {
+                worker.execute {
+                    val themeObj = ThemeManager.loadCachedThemeList(this).find { it.themeId == selectedThemeId }
+                        ?: ThemeManager.PRESET_THEMES.find { it.themeId == selectedThemeId }
+                    if (themeObj != null) {
+                        val api = runCatching { LeapmotorApi(session) }.getOrNull()
+                        val success = ThemeManager.syncThemePackage(this@MainActivity, api, themeObj)
+                        if (success) {
+                            runOnUiThread {
+                                selectedThemeId = ThemeManager.getActiveThemeId(this@MainActivity, session.selectedVin)
+                            }
+                        }
+                    }
+                }
+            }
+        }
         appearanceMode = AppearanceMode.SYSTEM
         if (sessionStore.loadAppearanceMode() != AppearanceMode.SYSTEM) {
             sessionStore.saveAppearanceMode(AppearanceMode.SYSTEM)
@@ -598,6 +616,35 @@ class MainActivity : ComponentActivity() {
             refreshHvacCapability()
             syncVehicleImage(session.selectedVin)
             refreshVehicleList()
+            syncThemesAndEnsureActive()
+        }
+    }
+
+    private fun syncThemesAndEnsureActive() {
+        val vin = session.selectedVin
+        if (vin.isBlank()) return
+        worker.execute {
+            runCatching {
+                val api = LeapmotorApi(session)
+                val themes = api.listThemeList(vin)
+                if (themes.isNotEmpty()) {
+                    ThemeManager.saveThemeListCache(this@MainActivity, themes)
+                }
+                val activeThemeId = ThemeManager.getActiveThemeId(this@MainActivity, vin)
+                if (activeThemeId != ThemeManager.DEFAULT_THEME_ID && !ThemeManager.isThemeReady(this@MainActivity, activeThemeId)) {
+                    val target = themes.find { it.themeId == activeThemeId }
+                        ?: ThemeManager.PRESET_THEMES.find { it.themeId == activeThemeId }
+                    if (target != null) {
+                        val ok = ThemeManager.syncThemePackage(this@MainActivity, api, target)
+                        if (ok) {
+                            runOnUiThread {
+                                selectedThemeId = activeThemeId
+                                vehicleImageVersion++
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -1323,6 +1370,7 @@ class MainActivity : ComponentActivity() {
                 sessionStore.save(session)
                 runOnMain(generation) {
                     availableVehicles = vehicles
+                    selectedThemeId = ThemeManager.getActiveThemeId(this@MainActivity, session.selectedVin)
                     hvacCapability = session.hvacCapability
                     toast("登录成功")
                     activeGeetestChallenge = null
@@ -1369,6 +1417,7 @@ class MainActivity : ComponentActivity() {
                 sessionStore.save(session)
                 runOnMain(generation) {
                     availableVehicles = vehicles
+                    selectedThemeId = ThemeManager.getActiveThemeId(this@MainActivity, session.selectedVin)
                     hvacCapability = session.hvacCapability
                     toast("凭据导入成功，已绑定远控权限")
                     loggedIn = true

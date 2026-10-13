@@ -29,6 +29,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -70,6 +71,12 @@ fun ThemeSelectorBottomSheet(
     val coroutineScope = rememberCoroutineScope()
     var downloadingThemeId by remember { mutableStateOf<String?>(null) }
     var activeThemeId by remember { mutableStateOf(currentThemeId) }
+
+    LaunchedEffect(Unit) {
+        withContext(Dispatchers.IO) {
+            ThemeManager.cleanInvalidBlurredCache(context)
+        }
+    }
 
     val pageBgColor = if (isDark) Color(0xFF161A23) else Color(0xFFF7F8FA)
 
@@ -145,24 +152,10 @@ fun ThemeSelectorBottomSheet(
                                 } else {
                                     downloadingThemeId = theme.themeId
                                     coroutineScope.launch(Dispatchers.IO) {
-                                        // 1. 优先预拉取单张 3D 展台实景大图，秒级就绪
-                                        val bgReady = ThemeManager.ensure3dBgDownloaded(context, theme)
-                                        if (bgReady) {
-                                            withContext(Dispatchers.Main) {
-                                                ThemeManager.setActiveThemeId(context, vin, theme.themeId)
-                                                activeThemeId = theme.themeId
-                                                ControlWidget.refreshData(context)
-                                                onThemeApplied(theme.themeId)
-                                            }
-                                        }
-                                        // 2. 后台同步下载并解压全量主题包 (包含小组件等皮肤)
-                                        val fullReady = if (api != null) {
-                                            ThemeManager.syncThemePackage(context, api, theme)
-                                        } else bgReady
-
+                                        val fullReady = ThemeManager.syncThemePackage(context, api, theme)
                                         withContext(Dispatchers.Main) {
                                             downloadingThemeId = null
-                                            if (fullReady || bgReady) {
+                                            if (fullReady) {
                                                 ThemeManager.setActiveThemeId(context, vin, theme.themeId)
                                                 activeThemeId = theme.themeId
                                                 ControlWidget.refreshData(context)

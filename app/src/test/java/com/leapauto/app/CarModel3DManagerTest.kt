@@ -370,13 +370,13 @@ class CarModel3DManagerTest {
     }
 
     @Test
-    fun `leap auto screen vehicle hero uses compact 180dp stage`() {
+    fun `leap auto screen vehicle hero uses balanced 225dp stage`() {
         val workingDirectory = requireNotNull(System.getProperty("user.dir"))
         val projectDir = generateSequence(File(workingDirectory)) { it.parentFile }
             .first { File(it, "app").isDirectory }
         val screenSource = File(projectDir, "app/src/main/java/com/leapauto/app/ui/LeapAutoScreen.kt").readText()
 
-        assertTrue(screenSource.contains(".height(180.dp)"))
+        assertTrue(screenSource.contains(".height(225.dp)"))
     }
 
     @Test

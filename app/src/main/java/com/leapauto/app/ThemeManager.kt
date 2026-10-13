@@ -62,9 +62,27 @@ object ThemeManager {
     }
 
     fun getBaseDir(context: Context): File {
-        return File(context.cacheDir, "CarThemes").apply {
+        val persistent = File(context.filesDir, "CarThemes").apply {
             if (!exists()) mkdirs()
         }
+        // 自动从旧版 cacheDir 迁移已有主题文件到永久 filesDir，确保无缝平滑过渡
+        val legacy = File(context.cacheDir, "CarThemes")
+        if (legacy.exists() && legacy.isDirectory) {
+            legacy.listFiles()?.forEach { item ->
+                val dest = File(persistent, item.name)
+                if (!dest.exists()) {
+                    runCatching {
+                        if (item.isDirectory) {
+                            item.copyRecursively(dest, overwrite = true)
+                        } else {
+                            item.copyTo(dest, overwrite = true)
+                        }
+                        Log.i(TAG, "已成功自动迁移主题资源: ${item.name} -> filesDir")
+                    }
+                }
+            }
+        }
+        return persistent
     }
 
     fun sanitizeKey(key: String): String {
@@ -91,12 +109,18 @@ object ThemeManager {
         return isThemeReady(getBaseDir(context), themeId)
     }
 
-    /** 智能兼容 ZIP 根目录或带有 resource/ 子目录的资源文件寻址 */
+    /** 智能兼容 ZIP 根目录或带有 resource/ 子目录的资源文件寻址（优先寻址解压后高清实景大图） */
     fun findThemeFile(themeDir: File, fileName: String): File? {
-        val direct = File(themeDir, fileName)
-        if (direct.exists() && direct.isFile) return direct
         val inSub = File(File(themeDir, "resource"), fileName)
-        if (inSub.exists() && inSub.isFile) return inSub
+        if (inSub.exists() && inSub.isFile && inSub.length() > 0L) return inSub
+        val direct = File(themeDir, fileName)
+        if (direct.exists() && direct.isFile && direct.length() > 0L) {
+            // 根目录下若存在小于 300KB 的旧版缩略图，避免误读为 3D 展台实景大图
+            if (fileName == "lpcar_pic_3d_bg.png" && direct.length() < 300_000L && inSub.exists()) {
+                return inSub
+            }
+            return direct
+        }
         return null
     }
 
@@ -132,32 +156,29 @@ object ThemeManager {
         return null
     }
 
-    /** 快速下载单张 3D 展台背景大图（确保零等待优先就绪） */
-    fun ensure3dBgDownloaded(context: Context, theme: VehicleTheme): Boolean {
-        val themeId = theme.themeId
-        if (themeId == DEFAULT_THEME_ID || themeId.isBlank()) return true
-        val existing = get3dBgFile(context, themeId)
-        if (existing != null && existing.exists() && existing.length() > 0L) return true
-        val bgUrl = theme.resourceBg ?: return false
-        val targetDir = getThemeDir(context, themeId).apply { mkdirs() }
-        val targetFile = File(targetDir, "lpcar_pic_3d_bg.png")
-        return try {
-            val req = okhttp3.Request.Builder().url(bgUrl).get().build()
-            val client = NetworkDebugController.httpClient()
-            client.newCall(req).execute().use { resp ->
-                if (resp.isSuccessful) {
-                    val bytes = resp.body?.bytes()
-                    if (bytes != null && bytes.isNotEmpty()) {
-                        targetFile.writeBytes(bytes)
-                        Log.i(TAG, "已成功单图预加载 3D 展台背景图: $themeId (${bytes.size} bytes)")
-                        true
-                    } else false
-                } else false
+    /** 安全清理历史误存的官方模糊遮罩图，确保纯净拉取高清 4K 实景大图 */
+    fun cleanInvalidBlurredCache(context: Context) {
+        val base = getBaseDir(context)
+        base.listFiles()?.forEach { dir ->
+            if (dir.isDirectory) {
+                val rootBg = File(dir, "lpcar_pic_3d_bg.png")
+                val inSubBg = File(File(dir, "resource"), "lpcar_pic_3d_bg.png")
+                if (rootBg.exists() && rootBg.length() < 300_000L) {
+                    rootBg.delete()
+                    Log.i(TAG, "已清理旧版模糊 3D 展台图缓存: ${rootBg.absolutePath}")
+                }
+                val hasValidBg = (rootBg.exists() && rootBg.length() > 300_000L) ||
+                                 (inSubBg.exists() && inSubBg.length() > 300_000L)
+                if (!hasValidBg) {
+                    File(dir, ".ready").delete()
+                }
             }
-        } catch (e: Exception) {
-            Log.w(TAG, "单图下载 3D 背景异常: $themeId", e)
-            false
         }
+    }
+
+    /** 快速同步 3D 展台高清大图包 */
+    fun ensure3dBgDownloaded(context: Context, theme: VehicleTheme): Boolean {
+        return syncThemePackage(context, null, theme)
     }
 
     enum class ThemeTone {
@@ -220,56 +241,103 @@ object ThemeManager {
     }
 
     /**
+     * 自包含的安全 ZIP 解压方法
+     */
+    fun downloadAndUnzipPackage(pkgUrl: String, destDir: File, expectedMd5: String? = null): Boolean {
+        if (pkgUrl.isBlank()) return false
+        destDir.mkdirs()
+        val canonicalDest = destDir.canonicalFile
+        val request = okhttp3.Request.Builder()
+            .url(pkgUrl)
+            .get()
+            .build()
+        val client = NetworkDebugController.httpClient()
+        return runCatching {
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) return@use false
+                val bytes = response.body?.bytes() ?: return@use false
+                if (bytes.size < 4 || bytes[0] != 0x50.toByte() || bytes[1] != 0x4B.toByte()) {
+                    return@use false
+                }
+                if (!expectedMd5.isNullOrBlank()) {
+                    val md5Digest = java.security.MessageDigest.getInstance("MD5")
+                    val actualMd5 = md5Digest.digest(bytes).joinToString("") { "%02x".format(it) }
+                    if (!actualMd5.equals(expectedMd5.trim(), ignoreCase = true)) {
+                        Log.w(TAG, "MD5 校验不匹配: 期望=$expectedMd5, 实际=$actualMd5")
+                        return@use false
+                    }
+                }
+                java.util.zip.ZipInputStream(java.io.ByteArrayInputStream(bytes)).use { zis ->
+                    while (true) {
+                        val entry = zis.nextEntry ?: break
+                        val targetFile = File(canonicalDest, entry.name).canonicalFile
+                        if (!targetFile.path.startsWith(canonicalDest.path + File.separator)) {
+                            throw java.io.IOException("Zip traversal rejected: ${entry.name}")
+                        }
+                        if (entry.isDirectory) {
+                            targetFile.mkdirs()
+                        } else {
+                            targetFile.parentFile?.mkdirs()
+                            java.io.FileOutputStream(targetFile).use { fos ->
+                                zis.copyTo(fos)
+                            }
+                        }
+                        zis.closeEntry()
+                    }
+                }
+                true
+            }
+        }.getOrDefault(false)
+    }
+
+    /**
      * 同步并安全解压主题包。
      * [theme] 包含主题信息、下载 URL 与 MD5 校验码。
      */
-    fun syncThemePackage(context: Context, api: LeapmotorApi, theme: VehicleTheme): Boolean {
+    fun syncThemePackage(context: Context, api: LeapmotorApi?, theme: VehicleTheme): Boolean {
         val themeId = theme.themeId
         if (theme.isDefault || themeId == DEFAULT_THEME_ID) {
             return true
         }
+        val targetDir = getThemeDir(context, themeId)
         if (isThemeReady(context, themeId)) {
             Log.d(TAG, "主题资源已就绪: id=$themeId, name=${theme.name}")
             return true
         }
-        // 优先确保单张背景大图秒级就绪
-        ensure3dBgDownloaded(context, theme)
 
         val pkgUrl = theme.resourcePkg
         if (pkgUrl.isNullOrBlank()) {
-            return isThemeReady(context, themeId)
+            return false
         }
-        val targetDir = getThemeDir(context, themeId)
-        Log.i(TAG, "开始下载并解压主题包: id=$themeId, name=${theme.name}, url=$pkgUrl")
-        val success = api.downloadThemePackage(pkgUrl, targetDir, theme.fileMd5)
-        if (!success) {
-            Log.w(TAG, "主题包下载解压失败，检查单张背景图是否可用: id=$themeId")
+        Log.i(TAG, "开始下载并解压高清实景主题包: id=$themeId, name=${theme.name}, url=$pkgUrl")
+        val success = if (api != null) {
+            api.downloadThemePackage(pkgUrl, targetDir, theme.fileMd5)
+        } else {
+            downloadAndUnzipPackage(pkgUrl, targetDir, theme.fileMd5)
+        }
+        if (success) {
             val bgFile = findThemeFile(targetDir, "lpcar_pic_3d_bg.png")
-            if (bgFile != null && bgFile.exists() && bgFile.length() > 0L) {
+            if (bgFile != null && bgFile.exists() && bgFile.length() > 300_000L) {
                 File(targetDir, ".ready").createNewFile()
+                Log.i(TAG, "高清 3D 实景主题包部署就绪: id=$themeId, name=${theme.name} (${bgFile.length()} bytes)")
                 return true
             }
-            return false
         }
-        val bgFile = findThemeFile(targetDir, "lpcar_pic_3d_bg.png")
-        if (bgFile != null && bgFile.exists() && bgFile.length() > 0L) {
-            File(targetDir, ".ready").createNewFile()
-            Log.i(TAG, "主题包部署就绪并打标: id=$themeId, name=${theme.name}")
-            return true
-        } else {
-            Log.w(TAG, "主题包解压后缺少 3D 背景图: id=$themeId")
-            return false
-        }
+        Log.w(TAG, "主题包下载解压失败或缺少高清 3D 背景图: id=$themeId")
+        return false
     }
 
     /** 获取车辆当前激活的主题 ID（优先读取本地自选设置，未设置时读取官方云端下发或默认） */
     fun getActiveThemeId(context: Context, vin: String, remoteTheme: VehicleTheme? = null): String {
         val store = SessionStore(context)
         val localSelected = store.loadSelectedThemeId(vin)
-        if (!localSelected.isNullOrBlank()) {
-            return localSelected
+        val result = if (!localSelected.isNullOrBlank()) {
+            localSelected
+        } else {
+            remoteTheme?.themeId?.takeIf { it.isNotBlank() } ?: DEFAULT_THEME_ID
         }
-        return remoteTheme?.themeId?.takeIf { it.isNotBlank() } ?: DEFAULT_THEME_ID
+        Log.i(TAG, "getActiveThemeId: vin='$vin', localSelected='$localSelected' -> result='$result'")
+        return result
     }
 
     /** 设置车辆当前主题，若设置为默认或 null 则恢复跟随默认/云端 */

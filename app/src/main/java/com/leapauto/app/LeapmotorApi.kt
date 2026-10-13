@@ -875,7 +875,7 @@ class LeapmotorApi internal constructor(
                 params = mapOf("key" to key),
                 includeTimespan = true
             )
-            val headers = oldAppHeaders(withToken = true)
+            val headers = combinedAppAndGatewayHeaders(params = signed, needLogin = true)
             val queryStr = signed.entries.joinToString("&") { (k, v) ->
                 "${URLEncoder.encode(k, "UTF-8")}=${URLEncoder.encode(v, "UTF-8")}"
             }
@@ -931,6 +931,7 @@ class LeapmotorApi internal constructor(
                 var (success, needRetryToken) = tryDownload(host)
                 if (needRetryToken) {
                     android.util.Log.i("CarModelDownload", "3D 车模下载遇到 token 校验失败，尝试自动续期后重试一次...")
+                    runCatching { refreshAccessTokenWithFallback() }
                     runCatching { refreshOldToken() }
                     val retry = tryDownload(host)
                     success = retry.first

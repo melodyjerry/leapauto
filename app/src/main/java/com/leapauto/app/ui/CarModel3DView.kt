@@ -219,10 +219,6 @@ internal class CarModelWebView(
                         """.trimIndent()
                         val patchedJs = mtkPrefix + "\n" + originalJs
                             .replace(
-                                "generateCar_viewer.frameState.skyBox=C,generateCar_viewer.scene.add(C)",
-                                "generateCar_viewer.frameState.skyBox=C,(\"default\"===_?generateCar_viewer.scene.add(C):0)"
-                            )
-                            .replace(
                                 "if(e.name===t)return e;",
                                 "if(e.name&&(e.name===t||e.name.toLowerCase().replaceAll(\".\",\"\").replaceAll(\" \",\"\")===t))return e;"
                             )
@@ -653,20 +649,13 @@ internal class CarModelWebView(
                     // 7. 同步定制主题纯透明透光或恢复官方 3D 原厂天空盒
                     var skyBox = (v && v.frameState && v.frameState.skyBox) || (window.viewer && window.viewer.frameState && window.viewer.frameState.skyBox);
                     var tid = String(state.themeId || '4');
+                    if (v) v.__currentThemeId = tid;
                     if (tid !== '4') {
                         if (skyBox) {
                             skyBox.visible = false;
-                            if (skyBox.parent) skyBox.parent.remove(skyBox);
                         }
-                        if (v && v.frameState) {
-                            if (v.frameState.skyBox) {
-                                v.frameState.skyBox.visible = false;
-                                if (v.frameState.skyBox.parent) v.frameState.skyBox.parent.remove(v.frameState.skyBox);
-                            }
-                            if (v.frameState.bg2D) {
-                                v.frameState.bg2D.visible = false;
-                                if (v.frameState.bg2D.parent) v.frameState.bg2D.parent.remove(v.frameState.bg2D);
-                            }
+                        if (v && v.frameState && v.frameState.skyBox) {
+                            v.frameState.skyBox.visible = false;
                         }
                         if (v && v.scene) v.scene.background = null;
                         if (v && v.renderer) {
@@ -674,9 +663,6 @@ internal class CarModelWebView(
                             v.renderer.setClearAlpha(0);
                         }
                     } else {
-                        if (v && v.frameState && v.frameState.bg2D) {
-                            v.frameState.bg2D.visible = false;
-                        }
                         if (skyBox) {
                             skyBox.visible = true;
                             if (imm && typeof skyBox.setDayOrNightImmediately === 'function') {
@@ -862,36 +848,17 @@ internal class CarModelWebView(
                                        (c.name && c.name.toLowerCase().indexOf("shadow") >= 0) ||
                                        (c.material && (c.material.isCarShadowMaterial || (c.material.uniforms && (c.material.uniforms.mainMap || c.material.uniforms.shadowMainMap))));
 
-                        if (tid !== '4') {
-                            if (isSky) {
-                                c.visible = false;
-                                if (c.parent) c.parent.remove(c);
-                            } else if (isBg2D) {
-                                c.visible = false;
-                                if (c.parent) c.parent.remove(c);
-                            } else if (isShadow) {
-                                c.visible = true;
-                            } else if (!isLane && !isCharger && !isLight) {
-                                c.visible = false;
-                            }
-                        } else {
-                            if (isBg2D) {
-                                c.visible = false;
-                            } else if (isSky) {
-                                c.visible = true;
-                            } else if (isShadow) {
-                                c.visible = true;
-                            } else if (!isLane && !isCharger && !isLight) {
-                                c.visible = false;
-                            }
+                        if (isSky) {
+                            c.visible = (tid === '4');
+                        } else if (isShadow) {
+                            c.visible = true;
+                        } else if (!isLane && !isCharger && !isLight) {
+                            c.visible = false;
                         }
                     }
                 });
                 if (tid !== '4') {
-                    if (v.frameState) {
-                        if (v.frameState.skyBox) v.frameState.skyBox.visible = false;
-                        if (v.frameState.bg2D) v.frameState.bg2D.visible = true;
-                    }
+                    if (v.frameState && v.frameState.skyBox) v.frameState.skyBox.visible = false;
                     v.scene.background = null;
                 }
             }
@@ -983,7 +950,15 @@ internal class CarModelWebView(
                         v.renderer.render(v.scene, activeCam);
                     }
                     var canvas = v.renderer ? v.renderer.domElement : null;
-                    if (sky) sky.visible = true;
+                    var tid = (v && v.__currentThemeId) || '$lastThemeId';
+                    if (sky) sky.visible = (tid === '4');
+                    if (tid !== '4') {
+                        if (v.scene) v.scene.background = null;
+                        if (v.renderer) {
+                            v.renderer.setClearColor(0x000000, 0);
+                            v.renderer.setClearAlpha(0);
+                        }
+                    }
 
                     if (canvas && typeof canvas.toDataURL === 'function') {
                         var url = canvas.toDataURL('image/png');

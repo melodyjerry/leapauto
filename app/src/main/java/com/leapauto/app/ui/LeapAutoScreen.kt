@@ -1463,11 +1463,11 @@ private fun HomeContent(
                     )
                 }
 
-                // 2. 下方功能卡片容器（保留座舱 12dp 黄金边距）
+                // 2. 下方功能卡片容器（收紧为 4dp 边距，横向饱满贴合，同时保留微晶悬浮圆角）
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 12.dp),
+                        .padding(horizontal = 4.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     // 1. 胎压与车况状态卡片
@@ -4251,26 +4251,9 @@ fun VehicleHero(
                         size = androidx.compose.ui.geometry.Size(w, h * 0.45f)
                     )
                 }
-
-                // 2D 展台底部地平线地雾消融层（柔和托起悬浮快捷按键）
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(140.dp)
-                        .align(Alignment.BottomCenter)
-                        .background(
-                            Brush.verticalGradient(
-                                0.0f to Color.Transparent,
-                                0.25f to pageBg.copy(alpha = if (isDark) 0.15f else 0.10f),
-                                0.55f to pageBg.copy(alpha = if (isDark) 0.45f else 0.35f),
-                                0.80f to pageBg.copy(alpha = if (isDark) 0.75f else 0.65f),
-                                1.0f to pageBg.copy(alpha = if (isDark) 0.92f else 0.88f)
-                            )
-                        )
-                )
             } else {
                 // 0. 定制主题实景展台大图 (选用定制主题时，作为首卡沉浸式底衬)
-                val themeBgBitmap = remember(selectedThemeId) {
+                val themeBgBitmap = remember(selectedThemeId, vehicleImageVersion) {
                     ThemeManager.load3dBgBitmap(context, selectedThemeId)
                 }
                 if (themeBgBitmap != null && selectedThemeId != ThemeManager.DEFAULT_THEME_ID) {
@@ -4334,20 +4317,23 @@ fun VehicleHero(
                             )
                         )
                 )
-
-                // 3. 展台最下沿极窄微羽化过渡（仅 20dp 边缘衔接下方功能卡片，还原快捷操作区通透实景画卷）
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(20.dp)
-                        .align(Alignment.BottomCenter)
-                        .background(
-                            Brush.verticalGradient(
-                                colors = listOf(Color.Transparent, pageBg.copy(alpha = if (isDark) 0.45f else 0.35f))
-                            )
-                        )
-                )
             }
+
+            // 底部地平线微羽化消融层：将实景展台最下沿自然过渡至页面底色，彻底消除割裂断层感
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(38.dp)
+                    .align(Alignment.BottomCenter)
+                    .background(
+                        Brush.verticalGradient(
+                            0.0f to Color.Transparent,
+                            0.45f to pageBg.copy(alpha = 0.35f),
+                            0.80f to pageBg.copy(alpha = 0.85f),
+                            1.0f to pageBg
+                        )
+                    )
+            )
 
             val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
             Column(
@@ -4795,7 +4781,7 @@ fun VehicleHero(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(180.dp),
+                        .height(225.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     val imageModifier = if (hasCustomImage) {
@@ -4875,7 +4861,7 @@ fun VehicleHero(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(180.dp),
+                        .height(225.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     if (remoteBitmap != null && !is3DRendered && !hasCustomImage && !prefer2DModel) {
@@ -4944,7 +4930,7 @@ fun VehicleHero(
                     onOpenHealthCheck = onOpenHealthCheck
                 )
             }
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(14.dp))
         }
     }
 
@@ -6449,33 +6435,29 @@ private fun QuickVehicleActions(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(top = 5.dp, bottom = 2.dp),
-                    horizontalArrangement = Arrangement.Center,
+                    horizontalArrangement = Arrangement.spacedBy(3.dp, Alignment.CenterHorizontally),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     repeat(pageCount) { page ->
                         val isSelected = pagerState.currentPage == page
-                        val dotSize by animateDpAsState(
-                            targetValue = if (isSelected) 5.5.dp else 4.dp,
-                            animationSpec = spring(
-                                dampingRatio = Spring.DampingRatioMediumBouncy,
-                                stiffness = Spring.StiffnessMedium
-                            ),
-                            label = "pageIndicatorDotSize"
+                        val indicatorWidth by animateDpAsState(
+                            targetValue = if (isSelected) 7.dp else 3.dp,
+                            animationSpec = tween(200),
+                            label = "quickActionIndicatorWidth"
                         )
                         val indicatorColor by animateColorAsState(
                             targetValue = if (isSelected) {
-                                MaterialTheme.colorScheme.primary
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.85f)
                             } else {
-                                if (isDark) Color.White.copy(alpha = 0.28f) else Color.Black.copy(alpha = 0.20f)
+                                if (isDark) Color.White.copy(alpha = 0.25f) else Color.Black.copy(alpha = 0.18f)
                             },
                             animationSpec = tween(200),
-                            label = "pageIndicatorColor"
+                            label = "quickActionIndicatorColor"
                         )
                         Box(
                             Modifier
-                                .padding(horizontal = 3.dp)
-                                .size(dotSize)
-                                .clip(CircleShape)
+                                .size(indicatorWidth, 1.8.dp)
+                                .clip(RoundedCornerShape(1.dp))
                                 .background(indicatorColor)
                         )
                     }

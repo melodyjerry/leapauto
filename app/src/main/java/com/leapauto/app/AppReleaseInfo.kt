@@ -5,5 +5,5 @@ object AppReleaseInfo {
         get() = BuildConfig.VERSION_NAME
 
     // Update this text together with apkVersionName before each delivery package.
-    const val currentReleaseNotes = "1. 优化能耗里程卡片自适应算法，设置 180~205dp 黄金比例高度门禁\n2. 重构指标竖卡内部布局，改为居中凝聚排列，彻底消除长条空旷感"
+    const val currentReleaseNotes = "1. 扩展首卡展台高度至 225dp，优化视口纵向开阔度并消除多余留白\n2. 优化车身展台视觉层次，使得快捷操作栏与功能卡片自然舒展"
 }

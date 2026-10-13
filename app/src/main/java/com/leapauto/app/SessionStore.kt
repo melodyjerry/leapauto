@@ -975,7 +975,7 @@ class SessionStore(context: Context) {
             if (safeVin.isNotBlank()) editor.putString("$SELECTED_THEME_ID_PREFIX$safeVin", clean)
             editor.putString(SELECTED_THEME_ID_GLOBAL, clean)
         }
-        editor.apply()
+        editor.commit()
     }
 
     companion object {
