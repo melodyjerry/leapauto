@@ -118,24 +118,25 @@ fun HealthyChargingBottomSheet(
         days: String
     ) -> Unit = { _, _, _ -> },
     onControl: (String) -> Unit = {},
-    onRefreshStatus: () -> Unit = {}
+    onRefreshStatus: () -> Unit = {},
+    onRefreshTelemetry: () -> Unit = onRefreshStatus
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val context = LocalContext.current
     var lastToastTime by remember { mutableLongStateOf(0L) }
 
-    // 每次进入充电中心界面，第一时间无条件向服务器强制拉取最新云端充电计划与车况遥测
+    // 每次进入充电中心界面，第一时间向服务器拉取最新云端充电计划与车况遥测
     LaunchedEffect(Unit) {
         onRefreshStatus()
     }
 
-    // 充电中每 1 秒自动静默刷新车况，实时同步电量、功率与倒计时
+    // 充电中每 1 秒仅静默轮询底层遥测（功率/电流/电压/倒计时），不重复轮询静态充电计划与控制策略
     val isChargingState = status?.chargeState == 1
     LaunchedEffect(isChargingState) {
         if (isChargingState) {
             while (true) {
                 delay(1000L)
-                onRefreshStatus()
+                onRefreshTelemetry()
             }
         }
     }

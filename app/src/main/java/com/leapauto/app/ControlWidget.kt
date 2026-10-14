@@ -176,7 +176,7 @@ class ControlWidget : AppWidgetProvider() {
         internal fun baseViews(context: Context): RemoteViews = RemoteViews(context.packageName, R.layout.widget_layout).apply {
             val store = SessionStore(context)
             val themeContext = widgetThemeContext(context)
-            val darkTheme = widgetUsesDarkAppearance(context)
+            val darkTheme = widgetEffectiveDarkTheme(context)
             applyWidgetBackground(context, this, darkTheme)
             applyStaticAppearance(themeContext, this)
             val snapshot = store.loadSelectedWidgetSnapshot()
@@ -252,7 +252,7 @@ class ControlWidget : AppWidgetProvider() {
         internal fun renderStatus(context: Context, views: RemoteViews, status: JSONObject, carType: String) {
             val store = SessionStore(context)
             val themeContext = widgetThemeContext(context)
-            val darkTheme = widgetUsesDarkAppearance(context)
+            val darkTheme = widgetEffectiveDarkTheme(context)
             applyWidgetBackground(context, views, darkTheme)
             applyStaticAppearance(themeContext, views)
             val session = store.load()
@@ -313,7 +313,7 @@ class ControlWidget : AppWidgetProvider() {
         internal fun renderSnapshot(context: Context, views: RemoteViews, snapshot: SessionStore.WidgetSnapshot) {
             val store = SessionStore(context)
             val themeContext = widgetThemeContext(context)
-            val darkTheme = widgetUsesDarkAppearance(context)
+            val darkTheme = widgetEffectiveDarkTheme(context)
             applyWidgetBackground(context, views, darkTheme)
             applyStaticAppearance(themeContext, views)
             val session = store.load()
@@ -386,7 +386,8 @@ class ControlWidget : AppWidgetProvider() {
         ) {
             val themeContext = widgetThemeContext(context)
             val iconColor = ContextCompat.getColor(themeContext, R.color.widget_action_icon)
-            val background = resolveWidgetActionBackground(context)
+            val darkTheme = widgetEffectiveDarkTheme(context)
+            val background = resolveWidgetActionBackground(context, darkTheme)
 
             val slotIds = listOf(R.id.slotW1, R.id.slotW2, R.id.slotW3, R.id.slotW4, R.id.slotW5)
             val btnBgIds = listOf(R.id.btnBgSlot1, R.id.btnBgSlot2, R.id.btnBgSlot3, R.id.btnBgSlot4, R.id.btnBgSlot5)
@@ -887,7 +888,7 @@ class ControlWidget : AppWidgetProvider() {
         private fun widgetActionBackgroundResource(darkTheme: Boolean): Int =
             if (darkTheme) R.drawable.widget_action_background_dark else R.drawable.widget_action_background_light
 
-        internal fun resolveWidgetActionBackground(context: Context, darkTheme: Boolean = widgetUsesDarkAppearance(context)): Int =
+        internal fun resolveWidgetActionBackground(context: Context, darkTheme: Boolean = widgetEffectiveDarkTheme(context)): Int =
             widgetActionBackgroundResource(darkTheme)
 
         internal fun widgetBackgroundResource(opacity: Int, darkTheme: Boolean): Int = when {
@@ -901,7 +902,7 @@ class ControlWidget : AppWidgetProvider() {
             else -> R.drawable.widget_card_background_light
         }
 
-        internal fun resolveWidgetCardBackground(context: Context, darkTheme: Boolean = widgetUsesDarkAppearance(context)): Int {
+        internal fun resolveWidgetCardBackground(context: Context, darkTheme: Boolean = widgetEffectiveDarkTheme(context)): Int {
             val store = SessionStore(context)
             val bgStyle = store.loadWidgetBackgroundStyle()
             if (bgStyle == SessionStore.WIDGET_BG_STYLE_LANDSCAPE) {
@@ -913,7 +914,7 @@ class ControlWidget : AppWidgetProvider() {
             return widgetBackgroundResource(opacity, darkTheme)
         }
 
-        internal fun resolveWidgetCardBackground(context: Context, opacity: Int, darkTheme: Boolean = widgetUsesDarkAppearance(context)): Int {
+        internal fun resolveWidgetCardBackground(context: Context, opacity: Int, darkTheme: Boolean = widgetEffectiveDarkTheme(context)): Int {
             val bgStyle = SessionStore(context).loadWidgetBackgroundStyle()
             if (bgStyle == SessionStore.WIDGET_BG_STYLE_LANDSCAPE) {
                 return if (darkTheme) R.drawable.widget_card_background_landscape_dark
@@ -935,7 +936,7 @@ class ControlWidget : AppWidgetProvider() {
             val session = store.load()
             val vin = session.selectedVin
             val activeThemeId = ThemeManager.getActiveThemeId(context, vin)
-            val themeBgBitmap = if (activeThemeId != ThemeManager.DEFAULT_THEME_ID) {
+            val themeBgBitmap = if (activeThemeId != ThemeManager.ORIGINAL_SKYBOX_THEME_ID) {
                 ThemeManager.loadWidgetBgBitmap(context, activeThemeId, is4x2 = true, darkTheme = darkTheme)
             } else null
 
@@ -966,7 +967,8 @@ class ControlWidget : AppWidgetProvider() {
             }
             // Use the widget's resolved appearance, including the user's explicit
             // light/dark preference, instead of the device configuration alone.
-            val actionBackground = resolveWidgetActionBackground(context)
+            val darkTheme = widgetEffectiveDarkTheme(context)
+            val actionBackground = resolveWidgetActionBackground(context, darkTheme)
             btnBgIds.forEach { id ->
                 views.setInt(id, "setBackgroundResource", actionBackground)
             }

@@ -5,5 +5,5 @@ object AppReleaseInfo {
         get() = BuildConfig.VERSION_NAME
 
     // Update this text together with apkVersionName before each delivery package.
-    const val currentReleaseNotes = "1. 修复能耗大卡内部布局高度约束，消除浅色模式下卡片底部大片死白\n2. 优化卡片黄金高度为 160dp 并实现指示器底边优雅贴合，视觉紧凑饱满"
+    const val currentReleaseNotes = "1. 同步更新官方四套主题，修复一些bug和优化UI显示效果；如遇到显示相关的bug建议卸载重装"
 }

@@ -387,7 +387,7 @@ class CarModel3DManagerTest {
         val screenSource = File(projectDir, "app/src/main/java/com/leapauto/app/ui/LeapAutoScreen.kt").readText()
 
         assertTrue(screenSource.contains("heroCardShape = RoundedCornerShape(16.dp)"))
-        assertTrue(screenSource.contains("if (show3D) null else glassCardBorder()"))
+        assertTrue(screenSource.contains("if (isImmersive) null else glassCardBorder()"))
         assertTrue(screenSource.contains("pageBg.copy(alpha = if (isDark)"))
     }
 

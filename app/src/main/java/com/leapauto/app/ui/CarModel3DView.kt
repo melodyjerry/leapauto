@@ -759,7 +759,7 @@ internal class CarModelWebView(
         obj.put("rudder", rudder)
         obj.put("radius", 7.2)
         obj.put("offset", 0.0)
-        val isCustomTheme = lastThemeId != ThemeManager.DEFAULT_THEME_ID && lastThemeId.isNotBlank()
+        val isCustomTheme = lastThemeId != ThemeManager.ORIGINAL_SKYBOX_THEME_ID && lastThemeId.isNotBlank()
         val themeParam = if (isCustomTheme) "https://$ASSETS_HOST/theme/3d_bg.png?t=$lastThemeId" else "default"
         obj.put("theme", themeParam)
 

@@ -252,6 +252,7 @@ class CompactWidgetSpecTest {
         assertTrue(screen.contains("小组件背景风格"))
         assertTrue(screen.contains("经典微晶"))
         assertTrue(screen.contains("官方山河"))
+        assertTrue(screen.contains("if (selectedThemeId == ThemeManager.ORIGINAL_SKYBOX_THEME_ID) {"))
     }
 
     @Test

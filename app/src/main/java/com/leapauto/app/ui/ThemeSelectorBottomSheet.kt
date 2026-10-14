@@ -70,6 +70,7 @@ fun ThemeSelectorBottomSheet(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val coroutineScope = rememberCoroutineScope()
     var downloadingThemeId by remember { mutableStateOf<String?>(null) }
+    var applyingThemeId by remember { mutableStateOf<String?>(null) }
     var activeThemeId by remember { mutableStateOf(currentThemeId) }
 
     LaunchedEffect(Unit) {
@@ -136,34 +137,52 @@ fun ThemeSelectorBottomSheet(
                     val isSelected = activeThemeId == theme.themeId
                     val isReady = ThemeManager.isThemeReady(context, theme.themeId)
                     val isDownloading = downloadingThemeId == theme.themeId
+                    val isApplying = applyingThemeId == theme.themeId
+                    val isBusy = isDownloading || isApplying
+
+                    val displayName = when {
+                        theme.themeId == ThemeManager.ORIGINAL_SKYBOX_THEME_ID || theme.name == "默认主题" || theme.name == "原厂天幕" -> "层峦叠嶂"
+                        theme.themeId == ThemeManager.DEFAULT_THEME_ID || theme.name == "雾川雪镜" -> "雾川雪境"
+                        else -> theme.name
+                    }
 
                     Surface(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(14.dp))
-                            .clickable(enabled = !isDownloading) {
-                                if (isSelected) return@clickable
-                                if (isReady || theme.isDefault || theme.themeId == ThemeManager.DEFAULT_THEME_ID) {
-                                    ThemeManager.setActiveThemeId(context, vin, theme.themeId)
-                                    activeThemeId = theme.themeId
-                                    ControlWidget.refreshData(context)
-                                    onThemeApplied(theme.themeId)
-                                    Toast.makeText(context, "已应用主题：${theme.name}", Toast.LENGTH_SHORT).show()
+                            .clickable(enabled = !isBusy && !isSelected) {
+                                if (isSelected || isBusy) return@clickable
+                                if (isReady || theme.themeId == ThemeManager.ORIGINAL_SKYBOX_THEME_ID) {
+                                    applyingThemeId = theme.themeId
+                                    coroutineScope.launch {
+                                        withContext(Dispatchers.IO) {
+                                            ThemeManager.setActiveThemeId(context, vin, theme.themeId)
+                                            ControlWidget.refreshData(context)
+                                        }
+                                        activeThemeId = theme.themeId
+                                        onThemeApplied(theme.themeId)
+                                        applyingThemeId = null
+                                        Toast.makeText(context, "已应用主题：$displayName", Toast.LENGTH_SHORT).show()
+                                    }
                                 } else {
                                     downloadingThemeId = theme.themeId
-                                    coroutineScope.launch(Dispatchers.IO) {
-                                        val fullReady = ThemeManager.syncThemePackage(context, api, theme)
-                                        withContext(Dispatchers.Main) {
-                                            downloadingThemeId = null
-                                            if (fullReady) {
+                                    coroutineScope.launch {
+                                        val fullReady = withContext(Dispatchers.IO) {
+                                            ThemeManager.syncThemePackage(context, api, theme)
+                                        }
+                                        downloadingThemeId = null
+                                        if (fullReady) {
+                                            applyingThemeId = theme.themeId
+                                            withContext(Dispatchers.IO) {
                                                 ThemeManager.setActiveThemeId(context, vin, theme.themeId)
-                                                activeThemeId = theme.themeId
                                                 ControlWidget.refreshData(context)
-                                                onThemeApplied(theme.themeId)
-                                                Toast.makeText(context, "已应用主题：${theme.name}", Toast.LENGTH_SHORT).show()
-                                            } else {
-                                                Toast.makeText(context, "主题包下载失败，请检查网络", Toast.LENGTH_SHORT).show()
                                             }
+                                            activeThemeId = theme.themeId
+                                            onThemeApplied(theme.themeId)
+                                            applyingThemeId = null
+                                            Toast.makeText(context, "已应用主题：$displayName", Toast.LENGTH_SHORT).show()
+                                        } else {
+                                            Toast.makeText(context, "主题包下载失败，请检查网络", Toast.LENGTH_SHORT).show()
                                         }
                                     }
                                 }
@@ -195,8 +214,13 @@ fun ThemeSelectorBottomSheet(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
+                                    val displayName = when {
+                                        theme.themeId == ThemeManager.ORIGINAL_SKYBOX_THEME_ID || theme.name == "默认主题" || theme.name == "原厂天幕" -> "层峦叠嶂"
+                                        theme.themeId == ThemeManager.DEFAULT_THEME_ID || theme.name == "雾川雪镜" -> "雾川雪境"
+                                        else -> theme.name
+                                    }
                                     Text(
-                                        text = theme.name,
+                                        text = displayName,
                                         style = MaterialTheme.typography.titleSmall,
                                         fontWeight = FontWeight.Bold,
                                         color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
@@ -220,7 +244,8 @@ fun ThemeSelectorBottomSheet(
                                             }
                                         }
                                     }
-                                    if (theme.isDefault) {
+                                    val isDefaultTheme = theme.themeId == ThemeManager.DEFAULT_THEME_ID
+                                    if (isDefaultTheme) {
                                         Box(
                                             modifier = Modifier
                                                 .background(
@@ -241,8 +266,12 @@ fun ThemeSelectorBottomSheet(
 
                                 Spacer(modifier = Modifier.height(5.dp))
 
+                                val displayDesc = when {
+                                    theme.themeId == ThemeManager.ORIGINAL_SKYBOX_THEME_ID || theme.name == "默认主题" -> "车模型 3D 原厂天空盒背景"
+                                    else -> theme.description
+                                }
                                 Text(
-                                    text = theme.description,
+                                    text = displayDesc,
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     lineHeight = 16.sp
@@ -251,14 +280,57 @@ fun ThemeSelectorBottomSheet(
 
                             Spacer(modifier = Modifier.width(12.dp))
 
-                            // 状态标记 / 下载提示 / 选中指示
+                            // 状态标记 / 下载提示 / 应用中 / 选中指示
                             when {
+                                isApplying -> {
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                                        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f))
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(5.dp)
+                                        ) {
+                                            CircularProgressIndicator(
+                                                modifier = Modifier.size(13.dp),
+                                                strokeWidth = 2.dp,
+                                                color = MaterialTheme.colorScheme.primary
+                                            )
+                                            Text(
+                                                text = "应用中",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = MaterialTheme.colorScheme.primary
+                                            )
+                                        }
+                                    }
+                                }
                                 isDownloading -> {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(20.dp),
-                                        strokeWidth = 2.dp,
-                                        color = MaterialTheme.colorScheme.primary
-                                    )
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                                        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f))
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(5.dp)
+                                        ) {
+                                            CircularProgressIndicator(
+                                                modifier = Modifier.size(13.dp),
+                                                strokeWidth = 2.dp,
+                                                color = MaterialTheme.colorScheme.primary
+                                            )
+                                            Text(
+                                                text = "下载中",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = MaterialTheme.colorScheme.primary
+                                            )
+                                        }
+                                    }
                                 }
                                 isSelected -> {
                                     Box(

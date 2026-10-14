@@ -22,7 +22,7 @@ class CompactControlWidget : AppWidgetProvider() {
             RemoteViews(context.packageName, R.layout.widget_compact_layout).apply {
                 val store = SessionStore(context)
                 val themeContext = ControlWidget.widgetThemeContext(context)
-                val darkTheme = ControlWidget.widgetUsesDarkAppearance(context)
+                val darkTheme = ControlWidget.widgetEffectiveDarkTheme(context)
                 val session = store.load()
                 val snapshot = store.loadSelectedWidgetSnapshot()
                 val config = store.loadVehicleConfig(session.selectedVin, session.selectedCarType)
@@ -32,7 +32,7 @@ class CompactControlWidget : AppWidgetProvider() {
                 )
                 val vin = session.selectedVin
                 val activeThemeId = ThemeManager.getActiveThemeId(context, vin)
-                val themeBgBitmap = if (activeThemeId != ThemeManager.DEFAULT_THEME_ID) {
+                val themeBgBitmap = if (activeThemeId != ThemeManager.ORIGINAL_SKYBOX_THEME_ID) {
                     ThemeManager.loadWidgetBgBitmap(context, activeThemeId, is4x2 = false, darkTheme = darkTheme)
                 } else null
 
@@ -337,7 +337,7 @@ class CompactControlWidget : AppWidgetProvider() {
         }
 
         private fun compactActionBackgroundResource(context: Context, tone: CompactActionTone): Int {
-            val darkTheme = ControlWidget.widgetUsesDarkAppearance(context)
+            val darkTheme = ControlWidget.widgetEffectiveDarkTheme(context)
             return when (tone) {
                 CompactActionTone.NEUTRAL -> if (darkTheme) {
                     R.drawable.widget_compact_action_neutral_dark

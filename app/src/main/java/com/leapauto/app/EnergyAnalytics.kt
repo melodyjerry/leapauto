@@ -151,7 +151,7 @@ data class EnergyAnalyticsData(
 object EnergyHomeCardPolicy {
     const val PAGE_COUNT = 4
     const val MIN_CARD_HEIGHT_DP = 135
-    const val BOTTOM_PADDING_DP = 4
+    const val BOTTOM_PADDING_DP = 22
 
     fun calculateDynamicCardHeightDp(
         viewportHeightPx: Int,
@@ -168,6 +168,17 @@ object EnergyHomeCardPolicy {
         return maxOf(minHeightDp.toFloat(), remainingDp)
     }
 
+    fun calculateViewportFillHeightPx(
+        viewportHeightPx: Int,
+        viewportTopPx: Int,
+        cardTopPx: Int,
+        bottomPaddingPx: Int,
+        minHeightPx: Int
+    ): Int {
+        val remainingPx = viewportHeightPx - (cardTopPx - viewportTopPx) - bottomPaddingPx
+        return maxOf(minHeightPx, remainingPx)
+    }
+
     fun todayMileage(data: EnergyAnalyticsData?): String {
         if (data == null || data.mileageTrend.isEmpty()) return "--"
         val shanghaiToday = try {
@@ -181,6 +192,13 @@ object EnergyHomeCardPolicy {
         val km = todayPoint.value
         val numStr = if (km % 1.0 == 0.0) km.toInt().toString() else String.format(java.util.Locale.US, "%.1f", km)
         return "${numStr}km"
+    }
+
+    fun formatCumulativeEnergy(raw: String?): String {
+        if (raw.isNullOrBlank() || raw.trim() == "--") return "--"
+        val clean = raw.trim().removeSuffix("kWh").trim().replace(",", "")
+        val num = clean.toDoubleOrNull() ?: return raw.trim()
+        return kotlin.math.round(num).toLong().toString()
     }
 
     fun recentTrend(data: EnergyAnalyticsData, limit: Int = 6): List<EnergySeriesPoint> =

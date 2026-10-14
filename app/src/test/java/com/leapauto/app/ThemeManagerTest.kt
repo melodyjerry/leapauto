@@ -29,12 +29,18 @@ class ThemeManagerTest {
         assertEquals(4, themes.size)
         val defaultTheme = themes.first()
         assertEquals(ThemeManager.DEFAULT_THEME_ID, defaultTheme.themeId)
+        assertEquals("7", defaultTheme.themeId)
         assertTrue(defaultTheme.isDefault)
-        assertEquals("默认主题", defaultTheme.name)
+        assertEquals("雾川雪境", defaultTheme.name)
+
+        val cengLuan = themes.find { it.themeId == "4" }
+        assertNotNull(cengLuan)
+        assertEquals("层峦叠嶂", cengLuan?.name)
+        assertFalse(cengLuan?.isDefault == true)
 
         val wuchuan = themes.find { it.themeId == "7" }
         assertNotNull(wuchuan)
-        assertEquals("雾川雪镜", wuchuan?.name)
+        assertEquals("雾川雪境", wuchuan?.name)
         assertEquals("e3a513f907c4df15b942d177dcf04547", wuchuan?.fileMd5)
 
         val yuhui = themes.find { it.themeId == "5" }
@@ -72,10 +78,10 @@ class ThemeManagerTest {
     }
 
     @Test
-    fun `isThemeReady returns true for default theme and checks ready marker for custom themes`() {
+    fun `isThemeReady returns true for original skybox theme and checks ready marker for custom themes`() {
         val baseDir = tempFolder.newFolder("CarThemes")
-        // Default theme is always ready
-        assertTrue(ThemeManager.isThemeReady(baseDir, ThemeManager.DEFAULT_THEME_ID))
+        // Original skybox theme (4) is always ready
+        assertTrue(ThemeManager.isThemeReady(baseDir, ThemeManager.ORIGINAL_SKYBOX_THEME_ID))
 
         val customDir = File(baseDir, "7")
         customDir.mkdirs()
@@ -128,8 +134,8 @@ class ThemeManagerTest {
         val theme = VehicleTheme.fromJson(JSONObject(jsonStr))
         assertEquals("7", theme.themeId)
         assertEquals("20260920004", theme.themeCode)
-        assertEquals("雾川雪镜", theme.name)
-        assertFalse(theme.isDefault)
+        assertEquals("雾川雪境", theme.name)
+        assertTrue(theme.isDefault)
         assertEquals(listOf("主题上新"), theme.tags)
         assertEquals("http://lp-carnet.oss-cn-hangzhou.aliyuncs.com/theme/7/bg.png", theme.resourceBg)
         assertEquals("http://lp-carnet.oss-cn-hangzhou.aliyuncs.com/theme/7/pkg.zip", theme.resourcePkg)
@@ -140,6 +146,18 @@ class ThemeManagerTest {
         assertEquals("http://lp-carnet.oss-cn-hangzhou.aliyuncs.com/theme/7/home_thumb.png", theme.homeThumbnail)
         assertEquals("http://lp-carnet.oss-cn-hangzhou.aliyuncs.com/theme/7/widget_preview.png", theme.widgetPreview)
         assertEquals("http://lp-carnet.oss-cn-hangzhou.aliyuncs.com/theme/7/widget_thumb.png", theme.widgetThumbnail)
+    }
+
+    @Test
+    fun `vehicle theme fromJson maps theme 4 to ceng luan die zhang and removes isDefault`() {
+        val theme4Json = JSONObject().apply {
+            put("themeId", "4")
+            put("name", "默认主题")
+            put("isDefault", true)
+        }
+        val theme4 = VehicleTheme.fromJson(theme4Json)
+        assertEquals("层峦叠嶂", theme4.name)
+        assertFalse(theme4.isDefault)
     }
 
     @Test
@@ -173,29 +191,27 @@ class ThemeManagerTest {
         assertEquals("pqxd6vFtMpktN6IfOpw9wA==", meta.srcWhole)
         assertNotNull(meta.currentTheme)
         assertEquals("7", meta.currentTheme?.themeId)
-        assertEquals("雾川雪镜", meta.currentTheme?.name)
+        assertEquals("雾川雪境", meta.currentTheme?.name)
     }
 
     @Test
     fun `theme tone correctly classifies light and dark themes`() {
         assertEquals(ThemeManager.ThemeTone.LIGHT, ThemeManager.getThemeTone("7"))
         assertEquals(ThemeManager.ThemeTone.LIGHT, ThemeManager.getThemeTone("8"))
-        assertEquals(ThemeManager.ThemeTone.DARK, ThemeManager.getThemeTone("5"))
+        assertEquals(ThemeManager.ThemeTone.LIGHT, ThemeManager.getThemeTone("5"))
         assertEquals(ThemeManager.ThemeTone.AUTO, ThemeManager.getThemeTone("4"))
         assertEquals(ThemeManager.ThemeTone.AUTO, ThemeManager.getThemeTone(""))
     }
 
     @Test
     fun `isHeroBackgroundDark correctly determines background luminosity for all themes`() {
-        // 余晖石筑（5）：无论系统是深色还是浅色，展台始终为暗色暮色背景
-        assertTrue(ThemeManager.isHeroBackgroundDark("5", isSystemDark = true))
-        assertTrue(ThemeManager.isHeroBackgroundDark("5", isSystemDark = false))
-
-        // 雾川雪镜（7）与晴空广场（8）：背景始终为高亮浅色
+        // 雾川雪镜（7）、晴空广场（8）与余晖石筑（5）：背景均为高亮浅色/暖砂背景
         assertFalse(ThemeManager.isHeroBackgroundDark("7", isSystemDark = true))
         assertFalse(ThemeManager.isHeroBackgroundDark("7", isSystemDark = false))
         assertFalse(ThemeManager.isHeroBackgroundDark("8", isSystemDark = true))
         assertFalse(ThemeManager.isHeroBackgroundDark("8", isSystemDark = false))
+        assertFalse(ThemeManager.isHeroBackgroundDark("5", isSystemDark = true))
+        assertFalse(ThemeManager.isHeroBackgroundDark("5", isSystemDark = false))
 
         // 默认主题（4）或空：跟随系统
         assertTrue(ThemeManager.isHeroBackgroundDark("4", isSystemDark = true))
@@ -206,17 +222,16 @@ class ThemeManagerTest {
 
     @Test
     fun `shouldApplyNightMoodFilter applies only to light themes in dark mode`() {
-        // 在深色模式下，浅色主题（7、8）需要夜巡微暗滤镜
+        // 在深色模式下，浅色主题（7、8、5）需要夜巡微暗滤镜
         assertTrue(ThemeManager.shouldApplyNightMoodFilter("7", isSystemDark = true))
         assertTrue(ThemeManager.shouldApplyNightMoodFilter("8", isSystemDark = true))
+        assertTrue(ThemeManager.shouldApplyNightMoodFilter("5", isSystemDark = true))
 
         // 在浅色模式下，不应叠加夜巡微暗滤镜
         assertFalse(ThemeManager.shouldApplyNightMoodFilter("7", isSystemDark = false))
         assertFalse(ThemeManager.shouldApplyNightMoodFilter("8", isSystemDark = false))
-
-        // 暗色主题（5）和默认主题无论何时都不施加夜巡滤镜
-        assertFalse(ThemeManager.shouldApplyNightMoodFilter("5", isSystemDark = true))
         assertFalse(ThemeManager.shouldApplyNightMoodFilter("5", isSystemDark = false))
+
         assertFalse(ThemeManager.shouldApplyNightMoodFilter("4", isSystemDark = true))
         assertFalse(ThemeManager.shouldApplyNightMoodFilter("4", isSystemDark = false))
     }

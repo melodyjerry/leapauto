@@ -301,8 +301,8 @@ private enum class ScreenDestination(val navigationOrder: Int) {
 }
 
 private enum class EnergyHomePage {
-    SUMMARY,
     RECENT_MILEAGE,
+    SUMMARY,
     WEEKLY_CONSUMPTION,
     WEEKLY_COMPOSITION
 }
@@ -676,7 +676,8 @@ fun LeapAutoScreen(
             onRefreshStatus = {
                 onRefresh()
                 onRefreshChargingSettings()
-            }
+            },
+            onRefreshTelemetry = onRefresh
         )
     }
 
@@ -1396,23 +1397,19 @@ private fun HomeContent(
         },
         modifier = Modifier.fillMaxSize()
     ) {
-        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        var homeViewportTopPx by remember { mutableStateOf<Int?>(null) }
+        BoxWithConstraints(
+            modifier = Modifier
+                .fillMaxSize()
+                .onGloballyPositioned { homeViewportTopPx = it.positionInWindow().y.toInt() }
+        ) {
             val viewportHeight = maxHeight
             val density = LocalDensity.current
-            var topContentHeightPx by remember { mutableIntStateOf(0) }
-            val minCardHeight = EnergyHomeCardPolicy.MIN_CARD_HEIGHT_DP.dp
+            var energyCardHeightPx by remember(viewportHeight) { mutableIntStateOf(0) }
             val bottomPadding = EnergyHomeCardPolicy.BOTTOM_PADDING_DP.dp
-            val dynamicCardHeight = remember(topContentHeightPx, viewportHeight) {
-                val heightDp = EnergyHomeCardPolicy.calculateDynamicCardHeightDp(
-                    viewportHeightPx = with(density) { viewportHeight.roundToPx() },
-                    topContentHeightPx = topContentHeightPx,
-                    topPaddingPx = with(density) { 4.dp.roundToPx() },
-                    spacingPx = with(density) { 4.dp.roundToPx() },
-                    bottomPaddingPx = with(density) { bottomPadding.roundToPx() },
-                    density = density.density,
-                    minHeightDp = EnergyHomeCardPolicy.MIN_CARD_HEIGHT_DP
-                )
-                heightDp.coerceIn(158f, 165f).dp
+            val dynamicCardHeight = with(density) {
+                energyCardHeightPx.takeIf { it > 0 }?.toDp()
+                    ?: EnergyHomeCardPolicy.MIN_CARD_HEIGHT_DP.dp
             }
 
             Column(
@@ -1423,11 +1420,7 @@ private fun HomeContent(
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 // 1. 全幅无边框沉浸式展台（100% 满屏无左右白边，气势恢宏）
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .onSizeChanged { topContentHeightPx = it.height }
-                ) {
+                Box(modifier = Modifier.fillMaxWidth()) {
                     VehicleHero(
                         vehicleDisplayModel,
                         vehicleAppearance,
@@ -1549,7 +1542,7 @@ private fun HomeContent(
                         )
                     }
 
-                    // 3. 底部能耗里程大卡片
+                    // 3. 底部能耗里程大卡片，自适应延展至当前设备可视区底部
                     EnergyHomePagerCard(
                         state = energyState,
                         vehicleTotalMileage = status?.totalMileage,
@@ -1557,6 +1550,18 @@ private fun HomeContent(
                         seamless = false,
                         modifier = Modifier
                             .fillMaxWidth()
+                            .onGloballyPositioned { coordinates ->
+                                val viewportTopPx = homeViewportTopPx
+                                if (energyCardHeightPx == 0 && viewportTopPx != null) {
+                                    energyCardHeightPx = EnergyHomeCardPolicy.calculateViewportFillHeightPx(
+                                        viewportHeightPx = with(density) { viewportHeight.roundToPx() },
+                                        viewportTopPx = viewportTopPx,
+                                        cardTopPx = coordinates.positionInWindow().y.toInt(),
+                                        bottomPaddingPx = with(density) { bottomPadding.roundToPx() },
+                                        minHeightPx = with(density) { EnergyHomeCardPolicy.MIN_CARD_HEIGHT_DP.dp.roundToPx() }
+                                    )
+                                }
+                            }
                             .height(dynamicCardHeight)
                     )
                 }
@@ -1814,18 +1819,20 @@ private fun MyContent(
         // 4. 下拉控制中心快捷开关
         QuickSettingsTileCard()
 
-        // 5. 小组件背景风格 (经典微晶 / 官方山河)
-        WidgetBackgroundStyleCard(
-            style = widgetBackgroundStyle,
-            onStyleChange = onWidgetBackgroundStyleChange
-        )
-
-        // 5.1 小组件透明度 (仅当用户选择经典微晶皮肤时显示)
-        if (widgetBackgroundStyle == SessionStore.WIDGET_BG_STYLE_MICROCRYSTAL) {
-            WidgetOpacityCard(
-                opacity = widgetOpacity,
-                onOpacityChange = onWidgetOpacityChange
+        // 5. 小组件背景风格与透明度 (仅当选用「层峦叠嶂」原厂主题时生效与呈现；其余定制主题由全套专属皮肤接管)
+        if (selectedThemeId == ThemeManager.ORIGINAL_SKYBOX_THEME_ID) {
+            WidgetBackgroundStyleCard(
+                style = widgetBackgroundStyle,
+                onStyleChange = onWidgetBackgroundStyleChange
             )
+
+            // 5.1 小组件透明度 (仅当用户选择经典微晶皮肤时显示)
+            if (widgetBackgroundStyle == SessionStore.WIDGET_BG_STYLE_MICROCRYSTAL) {
+                WidgetOpacityCard(
+                    opacity = widgetOpacity,
+                    onOpacityChange = onWidgetOpacityChange
+                )
+            }
         }
 
         // 5. 动力模式设置卡片 (纯电 / 增程，置于高德服务上方)
@@ -3356,7 +3363,13 @@ private fun ThemeConfigCard(
 ) {
     val context = LocalContext.current
     val cachedThemes = ThemeManager.loadCachedThemeList(context)
-    val activeThemeName = cachedThemes.firstOrNull { it.themeId == selectedThemeId }?.name ?: "默认主题"
+    val activeThemeName = when (selectedThemeId) {
+        ThemeManager.ORIGINAL_SKYBOX_THEME_ID -> "层峦叠嶂"
+        ThemeManager.DEFAULT_THEME_ID -> "雾川雪境"
+        else -> cachedThemes.firstOrNull { it.themeId == selectedThemeId }?.name?.let {
+            if (it == "默认主题" || it == "原厂天幕") "层峦叠嶂" else if (it == "雾川雪镜") "雾川雪境" else it
+        } ?: "雾川雪境"
+    }
 
     Surface(
         modifier = Modifier
@@ -4183,19 +4196,41 @@ fun VehicleHero(
     val heroPrimaryTextColor = if (isHeroDark) Color.White else MaterialTheme.colorScheme.onSurface
     val heroSecondaryTextColor = if (isHeroDark) Color.White.copy(alpha = 0.90f) else MaterialTheme.colorScheme.onSurfaceVariant
 
+    val themeBgBitmap = remember(selectedThemeId, vehicleImageVersion) {
+        ThemeManager.load3dBgBitmap(context, selectedThemeId)
+    }
+    val hasThemeBg = themeBgBitmap != null && selectedThemeId != ThemeManager.ORIGINAL_SKYBOX_THEME_ID
+    val isImmersive = show3D || hasThemeBg
+
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .then(if (show3D) Modifier else Modifier.clip(heroCardShape)),
-        shape = if (show3D) RectangleShape else heroCardShape,
+            .then(if (isImmersive) Modifier else Modifier.clip(heroCardShape)),
+        shape = if (isImmersive) RectangleShape else heroCardShape,
         color = Color.Transparent,
         contentColor = MaterialTheme.colorScheme.onSurface,
-        border = if (show3D) null else glassCardBorder(),
+        border = if (isImmersive) null else glassCardBorder(),
         shadowElevation = 0.dp
     ) {
-        Box(modifier = Modifier.fillMaxWidth().then(if (show3D) Modifier else Modifier.clip(heroCardShape))) {
-            if (!show3D) {
-                // 真实毛玻璃折射层（全景微晶渐变基底 + 能量环境极光 + 展台漫反射）
+        Box(modifier = Modifier.fillMaxWidth().then(if (isImmersive) Modifier else Modifier.clip(heroCardShape))) {
+            if (hasThemeBg) {
+                // 0. 定制主题实景展台大图 (选用定制主题时，作为首卡沉浸式底衬，2D 与 3D 均可享受实景巨幕)
+                Image(
+                    bitmap = themeBgBitmap!!.asImageBitmap(),
+                    contentDescription = "主题展台背景",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.matchParentSize()
+                )
+                // 夜巡沉浸微暗滤镜：在深色模式下，为高亮浅色主题（晴空广场、雾川雪镜、余晖石筑）轻柔叠加 12% 氛围暗光，平抑强光刺眼，舒适柔和
+                if (ThemeManager.shouldApplyNightMoodFilter(selectedThemeId, isDark)) {
+                    Box(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .background(Color.Black.copy(alpha = 0.12f))
+                    )
+                }
+            } else if (!show3D) {
+                // 默认主题且无定制背景下的 2D 模式：绘制微晶磨砂渐变基底 + 能量环境极光 + 展台漫反射
                 androidx.compose.foundation.Canvas(modifier = Modifier.matchParentSize()) {
                     val w = size.width
                     val h = size.height
@@ -4254,28 +4289,9 @@ fun VehicleHero(
                         size = androidx.compose.ui.geometry.Size(w, h * 0.45f)
                     )
                 }
-            } else {
-                // 0. 定制主题实景展台大图 (选用定制主题时，作为首卡沉浸式底衬)
-                val themeBgBitmap = remember(selectedThemeId, vehicleImageVersion) {
-                    ThemeManager.load3dBgBitmap(context, selectedThemeId)
-                }
-                if (themeBgBitmap != null && selectedThemeId != ThemeManager.DEFAULT_THEME_ID) {
-                    Image(
-                        bitmap = themeBgBitmap.asImageBitmap(),
-                        contentDescription = "主题展台背景",
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.matchParentSize()
-                    )
-                    // 夜巡沉浸微暗滤镜：在深色模式下，为高亮浅色主题（晴空广场、雾川雪镜）轻柔叠加 12% 氛围暗光，平抑强光刺眼，舒适柔和
-                    if (ThemeManager.shouldApplyNightMoodFilter(selectedThemeId, isDark)) {
-                        Box(
-                            modifier = Modifier
-                                .matchParentSize()
-                                .background(Color.Black.copy(alpha = 0.12f))
-                        )
-                    }
-                }
+            }
 
+            if (show3D) {
                 // 1. 3D 原厂 4K 全景天幕完全铺满整张首卡视口（浑然天成无任何画中画黑边断层）
                 val isDarkTheme = LocalAppDarkTheme.current
                 CarModel3DView(
@@ -4312,7 +4328,9 @@ fun VehicleHero(
                     },
                     onCarClick = null
                 )
+            }
 
+            if (isImmersive) {
                 // 2. 顶部微晶 HUD 渐变保护层（确保天幕上方的数据文字字字清晰锐利）
                 val hudTopAlpha = if (isHeroDark) 0.52f else 0.88f
                 val hudMidAlpha = if (isHeroDark) 0.24f else 0.52f
@@ -4810,11 +4828,11 @@ fun VehicleHero(
                             .offset(y = (-4).dp)
                             .clickable(onClick = onOpenHealthCheck)
                     } else {
-                        // 官方 2D 车图：精确对齐官方 3D 车模尺寸(260dp)与重心高度(-18dp)
+                        // 官方 2D 车图：精确对齐官方 3D 车模尺寸(285dp)与重心高度(-16dp)
                         Modifier
-                            .width(260.dp)
-                            .height(130.dp)
-                            .offset(y = (-18).dp)
+                            .width(285.dp)
+                            .height(142.dp)
+                            .offset(y = (-16).dp)
                             .clickable(onClick = onOpenHealthCheck)
                     }
                     Image(
@@ -4887,9 +4905,9 @@ fun VehicleHero(
                             contentDescription = "车身展示底图",
                             contentScale = ContentScale.Fit,
                             modifier = Modifier
-                                .width(260.dp)
-                                .height(130.dp)
-                                .offset(y = (-18).dp)
+                                .width(285.dp)
+                                .height(142.dp)
+                                .offset(y = (-16).dp)
                                 .graphicsLayer { alpha = 0.60f }
                         )
                     }
@@ -6249,7 +6267,7 @@ private fun QuickVehicleActions(
         ) {
             HorizontalPager(
                 state = pagerState,
-                modifier = Modifier.fillMaxWidth().height(64.dp),
+                modifier = Modifier.fillMaxWidth().height(74.dp),
                 beyondViewportPageCount = 1
             ) { page ->
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -6873,7 +6891,7 @@ private fun QuickVehicleButton(
     Column(
         modifier = modifier,
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(4.dp)
+        verticalArrangement = Arrangement.spacedBy(3.dp)
     ) {
         Box(contentAlignment = Alignment.Center) {
             // 高敏感操作 1.2 秒长按环形外圈蓄力进度光环
@@ -6945,10 +6963,11 @@ private fun QuickVehicleButton(
         }
         Text(
             label,
-            style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.5.sp),
+            style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.5.sp, lineHeight = 15.sp),
             color = if (inProgress) MaterialTheme.colorScheme.primary else labelTint,
             fontWeight = if (isWarning || inProgress) FontWeight.Bold else FontWeight.Medium,
-            maxLines = 1
+            maxLines = 1,
+            softWrap = false
         )
     }
 }
@@ -8729,7 +8748,7 @@ fun EnergyHomePagerCard(
     modifier: Modifier = Modifier,
     seamless: Boolean = false
 ) {
-    val pagerState = rememberPagerState(initialPage = EnergyHomePage.SUMMARY.ordinal) { EnergyHomePage.entries.size }
+    val pagerState = rememberPagerState(initialPage = EnergyHomePage.RECENT_MILEAGE.ordinal) { EnergyHomePage.entries.size }
     val goodColor = MaterialTheme.statusGood
     Surface(
         modifier = modifier
@@ -8755,9 +8774,9 @@ fun EnergyHomePagerCard(
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 val pageTitle = when (EnergyHomePage.entries[pagerState.currentPage]) {
+                    EnergyHomePage.RECENT_MILEAGE -> "近7天行驶里程"
                     EnergyHomePage.SUMMARY -> "能耗里程"
                     EnergyHomePage.WEEKLY_CONSUMPTION -> "近6周百公里能耗"
-                    EnergyHomePage.RECENT_MILEAGE -> "近7天行驶里程"
                     EnergyHomePage.WEEKLY_COMPOSITION -> "周能耗分布"
                 }
                 Row(
@@ -8790,9 +8809,9 @@ fun EnergyHomePagerCard(
                             .weight(1f)
                     ) { page ->
                         when (EnergyHomePage.entries[page]) {
+                            EnergyHomePage.RECENT_MILEAGE -> EnergyHomeMileagePage(state.data)
                             EnergyHomePage.SUMMARY -> EnergyHomeSummaryPage(state.data, vehicleTotalMileage)
                             EnergyHomePage.WEEKLY_CONSUMPTION -> EnergyHomeWeeklyPage(state.data)
-                            EnergyHomePage.RECENT_MILEAGE -> EnergyHomeMileagePage(state.data)
                             EnergyHomePage.WEEKLY_COMPOSITION -> EnergyHomeCompositionPage(state.data)
                         }
                     }
@@ -8853,7 +8872,7 @@ fun EnergyHomeSummaryPage(
     val energyHasValue = data.cumulativeEnergy != null
 
     val daysText = data.ownershipDays?.value?.toString() ?: "--"
-    val energyText = data.cumulativeEnergy?.value?.trim()?.removeSuffix("kWh")?.trim() ?: "--"
+    val energyText = EnergyHomeCardPolicy.formatCumulativeEnergy(data.cumulativeEnergy?.value)
 
     Row(
         modifier = Modifier
@@ -8913,11 +8932,12 @@ private fun EnergyMetricCard(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 6.dp, vertical = 8.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+                .padding(horizontal = 6.dp, vertical = 10.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            // 1. 标题行靠顶舒展排布，明确卡片属性层级
             Row(
+                modifier = Modifier.padding(top = 2.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
@@ -8936,29 +8956,36 @@ private fun EnergyMetricCard(
                 )
             }
 
-            Spacer(Modifier.height(6.dp))
+            // 2. 核心数值与单位居中优雅分布，彻底消除上下紧挤压抑感
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    text = value,
+                    fontSize = 20.sp,
+                    lineHeight = 24.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = valueColor,
+                    style = MaterialTheme.typography.titleMedium.energyStyle(),
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Ellipsis
+                )
 
-            Text(
-                text = value,
-                fontSize = 18.sp,
-                lineHeight = 22.sp,
-                fontWeight = FontWeight.Bold,
-                color = valueColor,
-                style = MaterialTheme.typography.titleMedium.energyStyle(),
-                maxLines = 1,
-                softWrap = false,
-                overflow = TextOverflow.Ellipsis
-            )
+                Spacer(Modifier.height(4.dp))
 
-            Spacer(Modifier.height(5.dp))
-
-            Text(
-                text = unit,
-                style = MaterialTheme.typography.labelSmall.energyStyle().copy(fontSize = 10.sp),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontWeight = FontWeight.Bold,
-                maxLines = 1
-            )
+                Text(
+                    text = unit,
+                    style = MaterialTheme.typography.labelSmall.energyStyle().copy(fontSize = 11.sp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1
+                )
+            }
         }
     }
 }
@@ -9020,7 +9047,24 @@ fun EnergyHomeMileagePage(data: EnergyAnalyticsData) {
             maxLines = 1
         )
         if (points.isEmpty()) {
-            EnergyHomeMissingData("暂无近 7 天里程数据")
+            Column(
+                modifier = Modifier.fillMaxWidth().weight(1f),
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(22.dp),
+                    strokeWidth = 2.dp,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "正在读取近 7 天里程数据...",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
+                )
+            }
         } else {
             EnergyHomeLineChart(points, modifier = Modifier.fillMaxWidth().weight(1f).padding(top = 4.dp, bottom = 2.dp))
         }
@@ -9337,7 +9381,7 @@ private fun EnergyHomeLineChart(
             .heightIn(min = 72.dp)
     ) {
         val pointRadius = 3.dp.toPx()
-        val horizontalInset = 16.dp.toPx()
+        val horizontalInset = 8.dp.toPx()
         val labelReserve = 15.dp.toPx()
         val dateReserve = 16.dp.toPx()
         val labelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -9422,15 +9466,25 @@ private fun EnergyHomeLineChart(
                 }
                 drawCircle(chartColor, radius = pointRadius, center = point)
                 drawCircle(Color.White, radius = pointRadius * 0.5f, center = point)
+
+                val valStr = points[index].value.formatEnergyNumber()
+                val valWidth = labelPaint.measureText(valStr)
+                val valHalfWidth = valWidth / 2f
+                val valX = point.x.coerceIn(valHalfWidth + 2.dp.toPx(), size.width - valHalfWidth - 2.dp.toPx())
                 drawContext.canvas.nativeCanvas.drawText(
-                    points[index].value.formatEnergyNumber(),
-                    point.x,
+                    valStr,
+                    valX,
                     (point.y - pointRadius - 3.dp.toPx()).coerceAtLeast(labelPaint.textSize),
                     labelPaint
                 )
+
+                val dateStr = EnergyWeekPeriodFormatter.monthDay(points[index].label)
+                val dateWidth = labelPaint.measureText(dateStr)
+                val dateHalfWidth = dateWidth / 2f
+                val dateX = point.x.coerceIn(dateHalfWidth + 2.dp.toPx(), size.width - dateHalfWidth - 2.dp.toPx())
                 drawContext.canvas.nativeCanvas.drawText(
-                    EnergyWeekPeriodFormatter.monthDay(points[index].label),
-                    point.x,
+                    dateStr,
+                    dateX,
                     dateY,
                     labelPaint
                 )
@@ -9446,17 +9500,30 @@ fun EnergyHomeEmptyPage(state: EnergyAnalyticsState) {
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(
-            when (state) {
-                EnergyAnalyticsState.Idle -> "能耗数据待同步"
-                EnergyAnalyticsState.Loading -> "正在读取能耗数据"
-                is EnergyAnalyticsState.Failed -> "能耗服务暂不可用"
-                is EnergyAnalyticsState.Success -> ""
-            },
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center
-        )
+        if (state is EnergyAnalyticsState.Loading || state is EnergyAnalyticsState.Idle) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(24.dp),
+                strokeWidth = 2.5.dp,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Spacer(Modifier.height(10.dp))
+            Text(
+                "正在读取行驶里程数据...",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center
+            )
+        } else {
+            Text(
+                when (state) {
+                    is EnergyAnalyticsState.Failed -> "能耗服务暂不可用"
+                    else -> "能耗数据待同步"
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center
+            )
+        }
     }
 }
 

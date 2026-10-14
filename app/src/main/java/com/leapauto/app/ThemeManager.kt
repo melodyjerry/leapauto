@@ -10,29 +10,31 @@ import org.json.JSONObject
 
 object ThemeManager {
     private const val TAG = "ThemeManager"
-    const val DEFAULT_THEME_ID = "4"
+    const val ORIGINAL_SKYBOX_THEME_ID = "4"
+    const val DEFAULT_THEME_ID = "7"
 
     // 官方 4 套预设主题内置兜底清单（弱网/离线即可呈现）
     val PRESET_THEMES: List<VehicleTheme> by lazy {
         listOf(
             VehicleTheme(
-                themeId = "4",
-                themeCode = "20260920001",
-                name = "默认主题",
-                description = "车模型默认 3D 主题背景",
-                isDefault = true
-            ),
-            VehicleTheme(
                 themeId = "7",
                 themeCode = "20260920004",
-                name = "雾川雪镜",
+                name = "雾川雪境",
                 description = "云雾缭绕的巍峨雪山与静谧冰河相映，宛如一幅空灵悠远的冬日水墨画卷。",
-                tags = listOf("主题上新"),
+                isDefault = true,
+                tags = listOf("官方默认"),
                 resourceBg = "http://lp-carnet.oss-cn-hangzhou.aliyuncs.com/leapmotor-app-theme-prod/7/resource_bg/bg.png?Expires=4943522631&OSSAccessKeyId=LTAI4Fmo2WXExVH9PecXNnpy&Signature=4JHJKx3YHDb8qQQOWIe%2Fm94wJck%3D",
                 resourcePkg = "http://lp-carnet.oss-cn-hangzhou.aliyuncs.com/leapmotor-app-theme-prod/7/resource_pkg/resource%20-%20%E9%9B%BE%E5%B7%9D%E9%9B%AA%E5%A2%83.zip",
                 resourcePkgName = "resource - 雾川雪境.zip",
                 fileSize = 2199406L,
                 fileMd5 = "e3a513f907c4df15b942d177dcf04547"
+            ),
+            VehicleTheme(
+                themeId = "4",
+                themeCode = "20260920001",
+                name = "层峦叠嶂",
+                description = "车模型 3D 原厂天空盒背景",
+                isDefault = false
             ),
             VehicleTheme(
                 themeId = "5",
@@ -98,7 +100,7 @@ object ThemeManager {
     }
 
     fun isThemeReady(baseDir: File, themeId: String): Boolean {
-        if (themeId == DEFAULT_THEME_ID || themeId.isBlank()) return true
+        if (themeId == ORIGINAL_SKYBOX_THEME_ID || themeId.isBlank()) return true
         val dir = getThemeDir(baseDir, themeId)
         if (!File(dir, ".ready").exists()) return false
         val bgFile = findThemeFile(dir, "lpcar_pic_3d_bg.png")
@@ -125,25 +127,25 @@ object ThemeManager {
     }
 
     fun get3dBgFile(context: Context, themeId: String): File? {
-        if (themeId == DEFAULT_THEME_ID || themeId.isBlank()) return null
+        if (themeId == ORIGINAL_SKYBOX_THEME_ID || themeId.isBlank()) return null
         val dir = getThemeDir(context, themeId)
         return findThemeFile(dir, "lpcar_pic_3d_bg.png")
     }
 
     fun getWidget4x2BgFile(context: Context, themeId: String): File? {
-        if (themeId == DEFAULT_THEME_ID || themeId.isBlank()) return null
+        if (themeId == ORIGINAL_SKYBOX_THEME_ID || themeId.isBlank()) return null
         val dir = getThemeDir(context, themeId)
         return findThemeFile(dir, "lpcar_pic_widget_4x2.png")
     }
 
     fun getWidget2x2BgFile(context: Context, themeId: String): File? {
-        if (themeId == DEFAULT_THEME_ID || themeId.isBlank()) return null
+        if (themeId == ORIGINAL_SKYBOX_THEME_ID || themeId.isBlank()) return null
         val dir = getThemeDir(context, themeId)
         return findThemeFile(dir, "lpcar_pic_widget_2x2.png")
     }
 
     fun load3dBgBitmap(context: Context, themeId: String): Bitmap? {
-        if (themeId == DEFAULT_THEME_ID || themeId.isBlank()) return null
+        if (themeId == ORIGINAL_SKYBOX_THEME_ID || themeId.isBlank()) return null
         val file = get3dBgFile(context, themeId)
         if (file != null && file.exists() && file.length() > 0L) {
             return try {
@@ -159,6 +161,14 @@ object ThemeManager {
     /** 安全清理历史误存的官方模糊遮罩图，确保纯净拉取高清 4K 实景大图 */
     fun cleanInvalidBlurredCache(context: Context) {
         val base = getBaseDir(context)
+        val cacheFile = File(base, "theme_list.json")
+        if (cacheFile.exists()) {
+            val content = cacheFile.readText(Charsets.UTF_8)
+            if (content.contains("默认主题") || content.contains("原厂天幕")) {
+                cacheFile.delete()
+                Log.i(TAG, "已清理包含旧默认名称的主题缓存，恢复新命名")
+            }
+        }
         base.listFiles()?.forEach { dir ->
             if (dir.isDirectory) {
                 val rootBg = File(dir, "lpcar_pic_3d_bg.png")
@@ -182,8 +192,8 @@ object ThemeManager {
     }
 
     enum class ThemeTone {
-        LIGHT, // 亮色背景主题（如雾川雪镜 7、晴空广场 8），强制使用高对比度深色文字
-        DARK,  // 暗色背景主题（如余晖石筑 5），强制使用纯白高对比度文字
+        LIGHT, // 亮色背景主题（如雾川雪镜 7、晴空广场 8、余晖石筑 5），强制使用高对比度深色文字
+        DARK,  // 暗色背景主题，强制使用纯白高对比度文字
         AUTO   // 默认主题（4），跟随系统原生深浅模式自适应
     }
 
@@ -191,7 +201,7 @@ object ThemeManager {
         return when (themeId) {
             "7" -> ThemeTone.LIGHT // 雾川雪镜：雪山冰河高亮底
             "8" -> ThemeTone.LIGHT // 晴空广场：湛蓝天空留白高光底
-            "5" -> ThemeTone.DARK  // 余晖石筑：暗色暮色岩石底
+            "5" -> ThemeTone.LIGHT // 余晖石筑：浅色暮色原野石筑，高光浅底
             else -> ThemeTone.AUTO // 默认主题跟随系统
         }
     }
@@ -310,7 +320,7 @@ object ThemeManager {
      */
     fun syncThemePackage(context: Context, api: LeapmotorApi?, theme: VehicleTheme): Boolean {
         val themeId = theme.themeId
-        if (theme.isDefault || themeId == DEFAULT_THEME_ID) {
+        if (themeId == ORIGINAL_SKYBOX_THEME_ID) {
             return true
         }
         val targetDir = getThemeDir(context, themeId)

@@ -11,6 +11,11 @@ class EnergyHomeCardPolicyTest {
     }
 
     @Test
+    fun `bottom padding provides adequate 22dp clearance for 16dp rounded corners`() {
+        assertEquals(22, EnergyHomeCardPolicy.BOTTOM_PADDING_DP)
+    }
+
+    @Test
     fun `home pager keeps only the newest six weekly points`() {
         val data = energyData(
             trend = (1..8).map { EnergySeriesPoint("week-$it", it.toDouble()) }
@@ -70,7 +75,18 @@ class EnergyHomeCardPolicyTest {
     }
 
     @Test
-    fun `calculateDynamicCardHeightDp accounts for bottom padding when remaining space is large`() {
+    fun `formatCumulativeEnergy rounds to integer without decimals`() {
+        assertEquals("3887", EnergyHomeCardPolicy.formatCumulativeEnergy("3887.0"))
+        assertEquals("3887", EnergyHomeCardPolicy.formatCumulativeEnergy("3887.0 kWh"))
+        assertEquals("3888", EnergyHomeCardPolicy.formatCumulativeEnergy("3887.6"))
+        assertEquals("3887", EnergyHomeCardPolicy.formatCumulativeEnergy("3887.4"))
+        assertEquals("12345", EnergyHomeCardPolicy.formatCumulativeEnergy("12,345.2"))
+        assertEquals("--", EnergyHomeCardPolicy.formatCumulativeEnergy("--"))
+        assertEquals("--", EnergyHomeCardPolicy.formatCumulativeEnergy(null))
+    }
+
+    @Test
+    fun `calculateDynamicCardHeightDp allows the final card to fill large remaining screen space`() {
         // density = 3.0f, viewport = 800dp (2400px), topContent = 460dp (1380px),
         // topPadding = 4dp (12px), spacing = 8dp (24px), bottomPadding = 12dp (36px)
         val calculated = EnergyHomeCardPolicy.calculateDynamicCardHeightDp(
@@ -111,6 +127,34 @@ class EnergyHomeCardPolicyTest {
             density = 3.0f
         )
         assertEquals(135.0f, calculated, 0.01f)
+    }
+
+    @Test
+    fun `viewport fill height uses the card real position relative to the home viewport`() {
+        assertEquals(
+            350,
+            EnergyHomeCardPolicy.calculateViewportFillHeightPx(
+                viewportHeightPx = 900,
+                viewportTopPx = 80,
+                cardTopPx = 620,
+                bottomPaddingPx = 10,
+                minHeightPx = 135
+            )
+        )
+    }
+
+    @Test
+    fun `viewport fill height preserves card minimum when content already exceeds viewport`() {
+        assertEquals(
+            135,
+            EnergyHomeCardPolicy.calculateViewportFillHeightPx(
+                viewportHeightPx = 900,
+                viewportTopPx = 80,
+                cardTopPx = 950,
+                bottomPaddingPx = 10,
+                minHeightPx = 135
+            )
+        )
     }
 
     private fun energyData(

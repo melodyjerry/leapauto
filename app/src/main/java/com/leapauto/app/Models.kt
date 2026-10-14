@@ -228,13 +228,25 @@ data class VehicleTheme(
                     if (t.isNotBlank()) tags.add(t)
                 }
             }
+            val themeId = json.optString("themeId")
+            val rawName = json.optString("name")
+            val name = when {
+                themeId == ThemeManager.ORIGINAL_SKYBOX_THEME_ID || rawName == "默认主题" || rawName == "原厂天幕" -> "层峦叠嶂"
+                themeId == ThemeManager.DEFAULT_THEME_ID || rawName == "雾川雪镜" -> "雾川雪境"
+                else -> rawName
+            }
+            val isDefault = themeId == ThemeManager.DEFAULT_THEME_ID
+            val description = when {
+                themeId == ThemeManager.ORIGINAL_SKYBOX_THEME_ID || rawName == "默认主题" -> "车模型 3D 原厂天空盒背景"
+                else -> json.optString("description")
+            }
             return VehicleTheme(
-                themeId = json.optString("themeId"),
+                themeId = themeId,
                 themeCode = json.optString("themeCode"),
-                name = json.optString("name"),
-                description = json.optString("description"),
+                name = name,
+                description = description,
                 tags = tags,
-                isDefault = json.optBoolean("isDefault", false),
+                isDefault = isDefault,
                 resourceBg = resObj?.optString("resourceBg")?.takeIf { it.isNotBlank() },
                 resourcePkg = resObj?.optString("resourcePkg")?.takeIf { it.isNotBlank() },
                 resourcePkgName = resObj?.optString("resourcePkgName")?.takeIf { it.isNotBlank() },

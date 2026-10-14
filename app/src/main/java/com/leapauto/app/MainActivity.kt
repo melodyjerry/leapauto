@@ -384,7 +384,7 @@ class MainActivity : ComponentActivity() {
         widgetOpacity = sessionStore.loadWidgetOpacity()
         ThemeManager.cleanInvalidBlurredCache(this)
         selectedThemeId = ThemeManager.getActiveThemeId(this, session.selectedVin)
-        if (selectedThemeId != ThemeManager.DEFAULT_THEME_ID) {
+        if (selectedThemeId != ThemeManager.ORIGINAL_SKYBOX_THEME_ID) {
             if (!ThemeManager.isThemeReady(this, selectedThemeId)) {
                 worker.execute {
                     val themeObj = ThemeManager.loadCachedThemeList(this).find { it.themeId == selectedThemeId }
@@ -631,7 +631,7 @@ class MainActivity : ComponentActivity() {
                     ThemeManager.saveThemeListCache(this@MainActivity, themes)
                 }
                 val activeThemeId = ThemeManager.getActiveThemeId(this@MainActivity, vin)
-                if (activeThemeId != ThemeManager.DEFAULT_THEME_ID && !ThemeManager.isThemeReady(this@MainActivity, activeThemeId)) {
+                if (activeThemeId != ThemeManager.ORIGINAL_SKYBOX_THEME_ID && !ThemeManager.isThemeReady(this@MainActivity, activeThemeId)) {
                     val target = themes.find { it.themeId == activeThemeId }
                         ?: ThemeManager.PRESET_THEMES.find { it.themeId == activeThemeId }
                     if (target != null) {
@@ -1607,81 +1607,116 @@ class MainActivity : ComponentActivity() {
                 // 1. 发起并发前先保证 Token 处于新鲜状态，避免子线程并发争抢触发续期
                 runCatching { api.ensureFreshOldToken() }
 
-                // 2. 对齐官方 App 抓包 (lhlc [317], [318], [319])：
-                // 三路并发异步请求，替代原有的多次串行阻塞等待，耗时降低至单次请求时长
+                // 2. 对齐官方 App 抓包：三路异步请求，优先极速回显【近 7 天行驶里程】
                 val executor = java.util.concurrent.Executors.newFixedThreadPool(3)
-                val (recentMileageResult, rankResult, compositionResult) = try {
-                    val futureRecentMileage = executor.submit(java.util.concurrent.Callable {
-                        runCatching {
-                            RecentMileageEnergyParser.parse(api.getRecentMileageEnergy(now))
-                        }
-                    })
-                    val futureRank = executor.submit(java.util.concurrent.Callable {
-                        runCatching {
-                            EnergyRankAnalyticsParser.parse(api.getLastNWeeks100kmEcAndRank())
-                        }
-                    })
-                    val futureComposition = executor.submit(java.util.concurrent.Callable {
-                        runCatching {
-                            LastWeekEnergyCompositionParser.parse(api.getLastWeekEc())
-                        }
-                    })
-                    Triple(
-                        futureRecentMileage.get(15, java.util.concurrent.TimeUnit.SECONDS),
-                        futureRank.get(15, java.util.concurrent.TimeUnit.SECONDS),
-                        futureComposition.get(15, java.util.concurrent.TimeUnit.SECONDS)
-                    )
-                } catch (timeout: java.util.concurrent.TimeoutException) {
-                    Triple(
-                        Result.failure(ApiException("近7日里程查询超时")),
-                        Result.failure(ApiException("周能耗排行查询超时")),
-                        Result.failure(ApiException("上周能耗构成查询超时"))
-                    )
-                } finally {
-                    executor.shutdownNow()
+                val futureRecentMileage = executor.submit(java.util.concurrent.Callable {
+                    runCatching {
+                        RecentMileageEnergyParser.parse(api.getRecentMileageEnergy(now))
+                    }
+                })
+                val futureRank = executor.submit(java.util.concurrent.Callable {
+                    runCatching {
+                        EnergyRankAnalyticsParser.parse(api.getLastNWeeks100kmEcAndRank())
+                    }
+                })
+                val futureComposition = executor.submit(java.util.concurrent.Callable {
+                    runCatching {
+                        LastWeekEnergyCompositionParser.parse(api.getLastWeekEc())
+                    }
+                })
+
+                // 第一阶段：优先极速等待【近 7 天行驶里程】（首屏第 1 项卡片零等待毫秒级优先回显）
+                val recentMileageResult = try {
+                    futureRecentMileage.get(10, java.util.concurrent.TimeUnit.SECONDS)
+                } catch (e: Exception) {
+                    Result.failure(e)
                 }
 
-                // 若核心凭证失效，抛出以触发统一重新登录流程
-                listOf(recentMileageResult, rankResult, compositionResult)
-                    .mapNotNull { it.exceptionOrNull() }
-                    .firstOrNull { SessionExpiry.isRefreshTokenInvalid(it.message) }
-                    ?.let { throw it }
+                recentMileageResult.exceptionOrNull()?.let {
+                    if (SessionExpiry.isRefreshTokenInvalid(it.message)) throw it
+                }
 
                 val recentMileage = recentMileageResult.getOrNull()
                     ?: runCatching {
-                        // 兜底回退：若直接查询失败，兼容尝试全历史范围接口
                         RecentMileageEnergyParser.parse(api.getMileageEnergy(purchaseAtMs, now))
                     }.getOrNull()
-
-                val rankData = rankResult.getOrNull()
-                val compositionList = compositionResult.getOrDefault(emptyList())
 
                 val totalMileageVal = recentMileage?.vehicleTotalMileage
                     ?: currentVehicleTotalMileage
                         ?.filter { ch -> ch.isDigit() || ch == '.' }
                         ?.takeIf { text -> text.isNotBlank() }
 
+                // 若优先拿到里程数据，立即组装临时数据极速刷新 UI，消除首屏等待
+                if (recentMileage != null) {
+                    val prevData = (energyState as? EnergyAnalyticsState.Success)?.data
+                    val interim = EnergyAnalyticsData(
+                        overallConsumption = prevData?.overallConsumption,
+                        trend = prevData?.trend.orEmpty(),
+                        rankLabel = prevData?.rankLabel,
+                        rankError = prevData?.rankError,
+                        lastWeekComposition = prevData?.lastWeekComposition.orEmpty(),
+                        ownershipDays = recentMileage.deliveryDays?.let {
+                            EnergyMetric(label = "提车天数", value = it.toString())
+                        } ?: prevData?.ownershipDays,
+                        cumulativeEnergy = recentMileage.totalEnergyKwh?.let {
+                            EnergyMetric(label = "累计能耗", value = it.toString(), unit = "kWh")
+                        } ?: prevData?.cumulativeEnergy,
+                        totalMileage = totalMileageVal?.let {
+                            EnergyMetric(label = "总里程", value = it, unit = "km")
+                        } ?: prevData?.totalMileage,
+                        recentMileage = EnergyMetric(label = "近7天行驶里程", value = recentMileage.totalMileageKm.toString(), unit = "km"),
+                        mileageTrend = recentMileage.mileage.map { EnergySeriesPoint(label = it.day, value = it.mileageKm) },
+                        capturedAt = now
+                    )
+                    runOnMain(generation) {
+                        if (energyState !is EnergyAnalyticsState.Success || (energyState as? EnergyAnalyticsState.Success)?.data?.recentMileage == null) {
+                            energyState = EnergyAnalyticsState.Success(interim)
+                        }
+                    }
+                }
+
+                // 第二阶段：平滑补齐后续接口（近 6 周百公里能耗趋势与周构成）
+                val rankResult = try {
+                    futureRank.get(12, java.util.concurrent.TimeUnit.SECONDS)
+                } catch (e: Exception) {
+                    Result.failure(e)
+                }
+                val compositionResult = try {
+                    futureComposition.get(12, java.util.concurrent.TimeUnit.SECONDS)
+                } catch (e: Exception) {
+                    Result.failure(e)
+                }
+                executor.shutdownNow()
+
+                listOf(rankResult, compositionResult)
+                    .mapNotNull { it.exceptionOrNull() }
+                    .firstOrNull { SessionExpiry.isRefreshTokenInvalid(it.message) }
+                    ?.let { throw it }
+
+                val rankData = rankResult.getOrNull()
+                val compositionList = compositionResult.getOrDefault(emptyList())
+
                 val merged = EnergyAnalyticsData(
-                    overallConsumption = rankData?.overallConsumption,
-                    trend = rankData?.weeklyTrend.orEmpty(),
-                    rankLabel = rankData?.rankLabel,
+                    overallConsumption = rankData?.overallConsumption ?: (energyState as? EnergyAnalyticsState.Success)?.data?.overallConsumption,
+                    trend = rankData?.weeklyTrend.orEmpty().ifEmpty { (energyState as? EnergyAnalyticsState.Success)?.data?.trend.orEmpty() },
+                    rankLabel = rankData?.rankLabel ?: (energyState as? EnergyAnalyticsState.Success)?.data?.rankLabel,
                     rankError = rankResult.exceptionOrNull()?.let { "周能耗趋势暂不可用" },
-                    lastWeekComposition = compositionList,
+                    lastWeekComposition = compositionList.ifEmpty { (energyState as? EnergyAnalyticsState.Success)?.data?.lastWeekComposition.orEmpty() },
                     ownershipDays = recentMileage?.deliveryDays?.let {
                         EnergyMetric(label = "提车天数", value = it.toString())
-                    },
+                    } ?: (energyState as? EnergyAnalyticsState.Success)?.data?.ownershipDays,
                     cumulativeEnergy = recentMileage?.totalEnergyKwh?.let {
                         EnergyMetric(label = "累计能耗", value = it.toString(), unit = "kWh")
-                    },
+                    } ?: (energyState as? EnergyAnalyticsState.Success)?.data?.cumulativeEnergy,
                     totalMileage = totalMileageVal?.let {
                         EnergyMetric(label = "总里程", value = it, unit = "km")
-                    },
+                    } ?: (energyState as? EnergyAnalyticsState.Success)?.data?.totalMileage,
                     recentMileage = recentMileage?.let {
                         EnergyMetric(label = "近7天行驶里程", value = it.totalMileageKm.toString(), unit = "km")
-                    },
+                    } ?: (energyState as? EnergyAnalyticsState.Success)?.data?.recentMileage,
                     mileageTrend = recentMileage?.mileage
                         ?.map { EnergySeriesPoint(label = it.day, value = it.mileageKm) }
-                        .orEmpty(),
+                        ?: (energyState as? EnergyAnalyticsState.Success)?.data?.mileageTrend.orEmpty(),
                     capturedAt = now
                 )
                 runOnMain(generation) {
@@ -1689,7 +1724,7 @@ class MainActivity : ComponentActivity() {
                         energyCacheStore.save(session.selectedVin, merged)
                         energyLastSuccessAt = merged.capturedAt
                         energyState = EnergyAnalyticsState.Success(merged)
-                    } else {
+                    } else if (energyState !is EnergyAnalyticsState.Success) {
                         energyLastSuccessAt = 0L
                         energyState = EnergyAnalyticsState.Failed("暂无可展示的能耗数据")
                     }
@@ -2540,12 +2575,12 @@ class MainActivity : ComponentActivity() {
                         healthyChargeEnabled = if (chargingProtected && optimisticHealthyChargeEnabled != null) {
                             optimisticHealthyChargeEnabled
                         } else {
-                            baseRefreshed.healthyChargeEnabled ?: sessionStore.loadHealthyChargeEnabled(session.selectedVin)
+                            sessionStore.loadHealthyChargeEnabled(session.selectedVin)
                         },
                         chargeScheduleSocLimit = if (chargingProtected && optimisticHealthyChargeLimitSoc != null) {
                             optimisticHealthyChargeLimitSoc
                         } else {
-                            baseRefreshed.chargeScheduleSocLimit ?: healthyChargeLimitSoc
+                            sessionStore.loadHealthyChargeLimit(session.selectedVin)
                         }
                     )
                     statusUpdatedAtEpochMs = receivedAtEpochMs
