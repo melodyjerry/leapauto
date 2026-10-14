@@ -370,13 +370,13 @@ class CarModel3DManagerTest {
     }
 
     @Test
-    fun `leap auto screen vehicle hero uses balanced 225dp stage`() {
+    fun `leap auto screen vehicle hero uses balanced compact stage`() {
         val workingDirectory = requireNotNull(System.getProperty("user.dir"))
         val projectDir = generateSequence(File(workingDirectory)) { it.parentFile }
             .first { File(it, "app").isDirectory }
         val screenSource = File(projectDir, "app/src/main/java/com/leapauto/app/ui/LeapAutoScreen.kt").readText()
 
-        assertTrue(screenSource.contains(".height(225.dp)"))
+        assertTrue(screenSource.contains(".height(175.dp)"))
     }
 
     @Test
@@ -398,7 +398,7 @@ class CarModel3DManagerTest {
             .first { File(it, "app").isDirectory }
         val screenSource = File(projectDir, "app/src/main/java/com/leapauto/app/ui/LeapAutoScreen.kt").readText()
 
-        assertTrue(screenSource.contains("mileageDisplayColor = MaterialTheme.colorScheme.onSurface"))
+        assertTrue(screenSource.contains("mileageDisplayColor = heroPrimaryTextColor"))
         assertTrue(screenSource.contains("electricGradientColors"))
         assertTrue(screenSource.contains("fuelGradientColors"))
         assertTrue(screenSource.contains("Color(0xFF0066FF), Color(0xFF00E676)"))

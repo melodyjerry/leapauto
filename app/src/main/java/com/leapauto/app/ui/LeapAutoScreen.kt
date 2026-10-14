@@ -1412,7 +1412,7 @@ private fun HomeContent(
                     density = density.density,
                     minHeightDp = EnergyHomeCardPolicy.MIN_CARD_HEIGHT_DP
                 )
-                heightDp.coerceIn(180f, 205f).dp
+                heightDp.coerceIn(158f, 165f).dp
             }
 
             Column(
@@ -1420,7 +1420,7 @@ private fun HomeContent(
                     .fillMaxSize()
                     .verticalScroll(rememberScrollState())
                     .padding(bottom = bottomPadding),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 // 1. 全幅无边框沉浸式展台（100% 满屏无左右白边，气势恢宏）
                 Box(
@@ -1479,7 +1479,7 @@ private fun HomeContent(
                             status = status,
                             modifier = Modifier
                                 .weight(1f)
-                                .height(120.dp),
+                                .height(105.dp),
                             onCarClick = onOpenHealthCheck,
                             seamless = false
                         )
@@ -1490,7 +1490,7 @@ private fun HomeContent(
                             onControl = onControl,
                             modifier = Modifier
                                 .weight(1f)
-                                .height(120.dp),
+                                .height(105.dp),
                             seamless = false
                         )
                     }
@@ -4179,6 +4179,9 @@ fun VehicleHero(
 
     val pageBg = MaterialTheme.colorScheme.background
     val heroCardShape = RoundedCornerShape(16.dp)
+    val isHeroDark = ThemeManager.isHeroBackgroundDark(selectedThemeId, isDark)
+    val heroPrimaryTextColor = if (isHeroDark) Color.White else MaterialTheme.colorScheme.onSurface
+    val heroSecondaryTextColor = if (isHeroDark) Color.White.copy(alpha = 0.90f) else MaterialTheme.colorScheme.onSurfaceVariant
 
     Surface(
         modifier = Modifier
@@ -4263,6 +4266,14 @@ fun VehicleHero(
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.matchParentSize()
                     )
+                    // 夜巡沉浸微暗滤镜：在深色模式下，为高亮浅色主题（晴空广场、雾川雪镜）轻柔叠加 12% 氛围暗光，平抑强光刺眼，舒适柔和
+                    if (ThemeManager.shouldApplyNightMoodFilter(selectedThemeId, isDark)) {
+                        Box(
+                            modifier = Modifier
+                                .matchParentSize()
+                                .background(Color.Black.copy(alpha = 0.12f))
+                        )
+                    }
                 }
 
                 // 1. 3D 原厂 4K 全景天幕完全铺满整张首卡视口（浑然天成无任何画中画黑边断层）
@@ -4303,17 +4314,19 @@ fun VehicleHero(
                 )
 
                 // 2. 顶部微晶 HUD 渐变保护层（确保天幕上方的数据文字字字清晰锐利）
+                val hudTopAlpha = if (isHeroDark) 0.52f else 0.88f
+                val hudMidAlpha = if (isHeroDark) 0.24f else 0.52f
+                val hudGradientColor = if (!isDark && isHeroDark) Color(0xFF131722) else pageBg
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(130.dp)
+                        .height(185.dp)
                         .background(
                             Brush.verticalGradient(
-                                colors = listOf(
-                                    pageBg.copy(alpha = if (isDark) 0.65f else 0.55f),
-                                    pageBg.copy(alpha = if (isDark) 0.22f else 0.16f),
-                                    Color.Transparent
-                                )
+                                0.0f to pageBg.copy(alpha = if (isDark) hudTopAlpha else 0.75f),
+                                0.45f to hudGradientColor.copy(alpha = if (isDark) hudMidAlpha else 0.40f),
+                                0.78f to hudGradientColor.copy(alpha = if (isDark) 0.18f else 0.12f),
+                                1.0f to Color.Transparent
                             )
                         )
                 )
@@ -4323,7 +4336,7 @@ fun VehicleHero(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(38.dp)
+                    .height(24.dp)
                     .align(Alignment.BottomCenter)
                     .background(
                         Brush.verticalGradient(
@@ -4337,7 +4350,7 @@ fun VehicleHero(
 
             val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
             Column(
-                modifier = Modifier.padding(top = statusBarTop + 6.dp, bottom = 0.dp),
+                modifier = Modifier.padding(top = statusBarTop + 14.dp, bottom = 0.dp),
                 verticalArrangement = Arrangement.spacedBy(0.dp)
             ) {
 
@@ -4370,7 +4383,7 @@ fun VehicleHero(
                                 nickname,
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface,
+                                color = heroPrimaryTextColor,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
@@ -4378,9 +4391,9 @@ fun VehicleHero(
                         if (availableVehicles.size > 1) {
                             Box(
                                 modifier = Modifier
-                                    .clip(RoundedCornerShape(6.dp))
-                                    .clickable { showVehicleSelectorDialog = true }
-                                    .padding(horizontal = 4.dp, vertical = 2.dp),
+                                .clip(RoundedCornerShape(6.dp))
+                                .clickable { showVehicleSelectorDialog = true }
+                                .padding(horizontal = 4.dp, vertical = 2.dp),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
@@ -4389,7 +4402,7 @@ fun VehicleHero(
                                     modifier = Modifier
                                         .size(13.dp)
                                         .rotate(90f),
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    tint = heroSecondaryTextColor
                                 )
                             }
                         }
@@ -4422,14 +4435,14 @@ fun VehicleHero(
                     Text(
                         text = statusTextWithWeather,
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.80f),
+                        color = heroSecondaryTextColor,
                         maxLines = 1
                     )
 
                     // 方案 A 智能座舱极光双色微晶体系：
-                    // 1. 里程大字统一为纯净微晶高光白 (深色) / 深邃科技黑曜灰 (浅色)
-                    val mileageDisplayColor = MaterialTheme.colorScheme.onSurface
-                    val unitDisplayColor = MaterialTheme.colorScheme.onSurfaceVariant
+                    // 1. 里程大字统一为纯净微晶高光白 (深色/暗调主题) / 深邃科技黑曜灰 (浅色高光主题)
+                    val mileageDisplayColor = heroPrimaryTextColor
+                    val unitDisplayColor = heroSecondaryTextColor
 
                     // 2. 纯电与增程纯电百分比：极光薄荷青 (深色 #00E676 / 浅色 #00B42A) / 警示色
                     val auroraMintGreen = if (isDark) Color(0xFF00E676) else Color(0xFF00B42A)
@@ -4679,7 +4692,7 @@ fun VehicleHero(
                                 Icon(
                                     painter = painterResource(R.drawable.ic_settings_gear),
                                     contentDescription = "设置",
-                                    tint = MaterialTheme.colorScheme.onSurface,
+                                    tint = heroPrimaryTextColor,
                                     modifier = Modifier.size(20.dp)
                                 )
                             }
@@ -4697,6 +4710,10 @@ fun VehicleHero(
                     val displayAddress = if (address != null && address.length > 10) "${address.take(10)}..." else address
 
                     // 1. 位置信息胶囊 (在上面)
+                    val defaultPillBg = if (isDark) Color(0xFF131722).copy(alpha = 0.68f) else Color.White.copy(alpha = 0.85f)
+                    val pillBorderStroke = BorderStroke(0.5.dp, if (isDark) Color.White.copy(alpha = 0.18f) else Color.Black.copy(alpha = 0.08f))
+                    val pillContentColor = if (isDark) Color.White else MaterialTheme.colorScheme.onSurface
+
                     if (displayAddress != null) {
                         Spacer(Modifier.height(2.dp))
                         Surface(
@@ -4704,9 +4721,9 @@ fun VehicleHero(
                                 .clip(RoundedCornerShape(percent = 50))
                                 .clickable(onClick = onParkingClick),
                             shape = RoundedCornerShape(percent = 50),
-                            color = Color.White.copy(alpha = if (isDark) 0.08f else 0.12f),
-                            contentColor = MaterialTheme.colorScheme.onSurface,
-                            border = null,
+                            color = defaultPillBg,
+                            contentColor = pillContentColor,
+                            border = pillBorderStroke,
                             shadowElevation = 0.dp
                         ) {
                             Row(
@@ -4718,7 +4735,7 @@ fun VehicleHero(
                                     painter = painterResource(R.drawable.ic_location_pin),
                                     contentDescription = null,
                                     modifier = Modifier.size(9.dp),
-                                    tint = MaterialTheme.colorScheme.onSurface
+                                    tint = pillContentColor
                                 )
                                 Text(
                                     text = displayAddress,
@@ -4737,7 +4754,7 @@ fun VehicleHero(
                     val pillBgColor = if (isMoving) {
                         MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
                     } else {
-                        Color.White.copy(alpha = if (isDark) 0.08f else 0.12f)
+                        defaultPillBg
                     }
 
                     Surface(
@@ -4746,8 +4763,8 @@ fun VehicleHero(
                             .clickable(onClick = onParkingClick),
                         shape = RoundedCornerShape(percent = 50),
                         color = pillBgColor,
-                        contentColor = if (isMoving) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-                        border = null,
+                        contentColor = if (isMoving) MaterialTheme.colorScheme.primary else pillContentColor,
+                        border = if (isMoving) BorderStroke(0.5.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)) else pillBorderStroke,
                         shadowElevation = 0.dp
                     ) {
                         Row(
@@ -4781,7 +4798,7 @@ fun VehicleHero(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(225.dp),
+                        .height(175.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     val imageModifier = if (hasCustomImage) {
@@ -4861,7 +4878,7 @@ fun VehicleHero(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(225.dp),
+                        .height(175.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     if (remoteBitmap != null && !is3DRendered && !hasCustomImage && !prefer2DModel) {
@@ -4930,7 +4947,7 @@ fun VehicleHero(
                     onOpenHealthCheck = onOpenHealthCheck
                 )
             }
-            Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(2.dp))
         }
     }
 
@@ -5407,7 +5424,7 @@ private fun ChargingCenterPill(
         ChargingPillType.GUN_CONNECTED -> MaterialTheme.statusGood.copy(alpha = if (isDark) 0.45f else 0.55f)
         ChargingPillType.SCHEDULED_WAITING,
         ChargingPillType.DEFAULT -> if (isDark) {
-            Color.White.copy(alpha = 0.22f)
+            Color.White.copy(alpha = 0.18f)
         } else {
             MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.60f)
         }
@@ -5418,12 +5435,12 @@ private fun ChargingCenterPill(
         ChargingPillType.GUN_CONNECTED -> MaterialTheme.statusGood.copy(alpha = if (isDark) 0.16f else 0.12f)
         ChargingPillType.SCHEDULED_WAITING,
         ChargingPillType.DEFAULT -> if (isDark) {
-            Color.White.copy(alpha = 0.10f)
+            Color(0xFF131722).copy(alpha = 0.68f)
         } else {
             MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.60f)
         }
     }
-    val textColor = MaterialTheme.colorScheme.onSurface
+    val textColor = if (isDark) Color.White else MaterialTheme.colorScheme.onSurface
 
     Surface(
         shape = RoundedCornerShape(percent = 50),
@@ -6232,7 +6249,7 @@ private fun QuickVehicleActions(
         ) {
             HorizontalPager(
                 state = pagerState,
-                modifier = Modifier.fillMaxWidth().height(70.dp),
+                modifier = Modifier.fillMaxWidth().height(64.dp),
                 beyondViewportPageCount = 1
             ) { page ->
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -6449,7 +6466,7 @@ private fun QuickVehicleActions(
                             targetValue = if (isSelected) {
                                 MaterialTheme.colorScheme.primary.copy(alpha = 0.85f)
                             } else {
-                                if (isDark) Color.White.copy(alpha = 0.25f) else Color.Black.copy(alpha = 0.18f)
+                                if (isDark) Color.White.copy(alpha = 0.50f) else Color.Black.copy(alpha = 0.32f)
                             },
                             animationSpec = tween(200),
                             label = "quickActionIndicatorColor"
@@ -6980,7 +6997,7 @@ private fun HomeTirePressureCard(
     val auraColor = if (hasWarning) warningColor.copy(alpha = 0.14f) else goodColor.copy(alpha = 0.10f)
     Surface(
         modifier = modifier
-            .heightIn(min = 120.dp)
+            .heightIn(min = 105.dp)
             .then(
                 if (!seamless) Modifier.frostedGlassCard(
                     shape = RoundedCornerShape(16.dp),
@@ -7479,7 +7496,7 @@ fun VehicleStatusCard(
     }
     Surface(
         modifier = modifier
-            .heightIn(min = 120.dp)
+            .heightIn(min = 105.dp)
             .then(
                 if (!seamless) Modifier.frostedGlassCard(
                     shape = RoundedCornerShape(16.dp),
@@ -8732,8 +8749,10 @@ fun EnergyHomePagerCard(
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
             Column(
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 14.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 val pageTitle = when (EnergyHomePage.entries[pagerState.currentPage]) {
                     EnergyHomePage.SUMMARY -> "能耗里程"
@@ -8917,7 +8936,7 @@ private fun EnergyMetricCard(
                 )
             }
 
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(6.dp))
 
             Text(
                 text = value,
@@ -8931,7 +8950,7 @@ private fun EnergyMetricCard(
                 overflow = TextOverflow.Ellipsis
             )
 
-            Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(5.dp))
 
             Text(
                 text = unit,

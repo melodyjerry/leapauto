@@ -184,4 +184,40 @@ class ThemeManagerTest {
         assertEquals(ThemeManager.ThemeTone.AUTO, ThemeManager.getThemeTone("4"))
         assertEquals(ThemeManager.ThemeTone.AUTO, ThemeManager.getThemeTone(""))
     }
+
+    @Test
+    fun `isHeroBackgroundDark correctly determines background luminosity for all themes`() {
+        // 余晖石筑（5）：无论系统是深色还是浅色，展台始终为暗色暮色背景
+        assertTrue(ThemeManager.isHeroBackgroundDark("5", isSystemDark = true))
+        assertTrue(ThemeManager.isHeroBackgroundDark("5", isSystemDark = false))
+
+        // 雾川雪镜（7）与晴空广场（8）：背景始终为高亮浅色
+        assertFalse(ThemeManager.isHeroBackgroundDark("7", isSystemDark = true))
+        assertFalse(ThemeManager.isHeroBackgroundDark("7", isSystemDark = false))
+        assertFalse(ThemeManager.isHeroBackgroundDark("8", isSystemDark = true))
+        assertFalse(ThemeManager.isHeroBackgroundDark("8", isSystemDark = false))
+
+        // 默认主题（4）或空：跟随系统
+        assertTrue(ThemeManager.isHeroBackgroundDark("4", isSystemDark = true))
+        assertFalse(ThemeManager.isHeroBackgroundDark("4", isSystemDark = false))
+        assertTrue(ThemeManager.isHeroBackgroundDark("", isSystemDark = true))
+        assertFalse(ThemeManager.isHeroBackgroundDark("", isSystemDark = false))
+    }
+
+    @Test
+    fun `shouldApplyNightMoodFilter applies only to light themes in dark mode`() {
+        // 在深色模式下，浅色主题（7、8）需要夜巡微暗滤镜
+        assertTrue(ThemeManager.shouldApplyNightMoodFilter("7", isSystemDark = true))
+        assertTrue(ThemeManager.shouldApplyNightMoodFilter("8", isSystemDark = true))
+
+        // 在浅色模式下，不应叠加夜巡微暗滤镜
+        assertFalse(ThemeManager.shouldApplyNightMoodFilter("7", isSystemDark = false))
+        assertFalse(ThemeManager.shouldApplyNightMoodFilter("8", isSystemDark = false))
+
+        // 暗色主题（5）和默认主题无论何时都不施加夜巡滤镜
+        assertFalse(ThemeManager.shouldApplyNightMoodFilter("5", isSystemDark = true))
+        assertFalse(ThemeManager.shouldApplyNightMoodFilter("5", isSystemDark = false))
+        assertFalse(ThemeManager.shouldApplyNightMoodFilter("4", isSystemDark = true))
+        assertFalse(ThemeManager.shouldApplyNightMoodFilter("4", isSystemDark = false))
+    }
 }

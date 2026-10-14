@@ -196,6 +196,20 @@ object ThemeManager {
         }
     }
 
+    /** 判断在给定的主题与系统外观下，首卡展台是否为暗色背景（用于决定顶部数据区文字是偏白还是偏黑） */
+    fun isHeroBackgroundDark(themeId: String, isSystemDark: Boolean): Boolean {
+        return when (getThemeTone(themeId)) {
+            ThemeTone.DARK -> true   // 余晖石筑：背景天生为深色暮色，无论系统深浅，展台皆为暗底
+            ThemeTone.LIGHT -> false // 晴空/雪镜：背景天生为高亮白天，展台皆为亮底
+            ThemeTone.AUTO -> isSystemDark // 默认主题：跟随系统深浅外观
+        }
+    }
+
+    /** 是否需要在深色模式下为浅色高光主题（如晴空广场/雾川雪镜）施加微弱夜巡沉浸滤镜，避免夜晚强光刺眼 */
+    fun shouldApplyNightMoodFilter(themeId: String, isSystemDark: Boolean): Boolean {
+        return isSystemDark && getThemeTone(themeId) == ThemeTone.LIGHT
+    }
+
     /** 按照 20dp 标准座舱 R 角与微晶描边对位图进行平滑抗锯齿物理裁剪，杜绝尖角直角 */
     fun createRoundedWidgetBitmap(src: Bitmap, cornerRadiusPx: Float, strokeColor: Int? = null): Bitmap {
         val output = Bitmap.createBitmap(src.width, src.height, Bitmap.Config.ARGB_8888)

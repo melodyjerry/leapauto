@@ -150,8 +150,8 @@ data class EnergyAnalyticsData(
 /** Data limits used by the compact home energy pager. */
 object EnergyHomeCardPolicy {
     const val PAGE_COUNT = 4
-    const val MIN_CARD_HEIGHT_DP = 176
-    const val BOTTOM_PADDING_DP = 12
+    const val MIN_CARD_HEIGHT_DP = 135
+    const val BOTTOM_PADDING_DP = 4
 
     fun calculateDynamicCardHeightDp(
         viewportHeightPx: Int,

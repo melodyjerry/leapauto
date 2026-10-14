@@ -5,5 +5,5 @@ object AppReleaseInfo {
         get() = BuildConfig.VERSION_NAME
 
     // Update this text together with apkVersionName before each delivery package.
-    const val currentReleaseNotes = "1. 扩展首卡展台高度至 225dp，优化视口纵向开阔度并消除多余留白\n2. 优化车身展台视觉层次，使得快捷操作栏与功能卡片自然舒展"
+    const val currentReleaseNotes = "1. 修复能耗大卡内部布局高度约束，消除浅色模式下卡片底部大片死白\n2. 优化卡片黄金高度为 160dp 并实现指示器底边优雅贴合，视觉紧凑饱满"
 }

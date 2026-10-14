@@ -86,18 +86,18 @@ class EnergyHomeCardPolicyTest {
 
     @Test
     fun `calculateDynamicCardHeightDp clamps to minimum height when remaining space is small`() {
-        // density = 3.0f, viewport = 700dp (2100px), topContent = 520dp (1560px),
+        // density = 3.0f, viewport = 700dp (2100px), topContent = 600dp (1800px),
         // topPadding = 4dp (12px), spacing = 8dp (24px), bottomPadding = 12dp (36px)
-        // remaining = 156dp < MIN_CARD_HEIGHT_DP (176dp)
+        // remaining = (2100 - 1800 - 12 - 24 - 36) / 3 = 76dp < MIN_CARD_HEIGHT_DP (135dp)
         val calculated = EnergyHomeCardPolicy.calculateDynamicCardHeightDp(
             viewportHeightPx = 2100,
-            topContentHeightPx = 1560,
+            topContentHeightPx = 1800,
             topPaddingPx = 12,
             spacingPx = 24,
             bottomPaddingPx = 36,
             density = 3.0f
         )
-        assertEquals(176.0f, calculated, 0.01f)
+        assertEquals(135.0f, calculated, 0.01f)
     }
 
     @Test
@@ -110,7 +110,7 @@ class EnergyHomeCardPolicyTest {
             bottomPaddingPx = 36,
             density = 3.0f
         )
-        assertEquals(176.0f, calculated, 0.01f)
+        assertEquals(135.0f, calculated, 0.01f)
     }
 
     private fun energyData(
