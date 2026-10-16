@@ -63,6 +63,9 @@ fun CarModel3DView(
         },
         update = { webView ->
             webView.onCarClick = onCarClick
+            if (webView.isReady) {
+                onReady()
+            }
             webView.updateVehicleState(status, cruising = isCruising, isDark = isDark, themeId = themeId)
         }
     )
@@ -89,6 +92,7 @@ internal class CarModelWebView(
     private var touchStartTime = 0L
     private var isDragging = false
     private var isSceneReady = false
+    val isReady: Boolean get() = isSceneReady
     private var snapshotSaved = false
     private var hasAppliedInitialState = false
 
@@ -160,6 +164,14 @@ internal class CarModelWebView(
                         val mtkHookScript = """
                             <script>
                             (function() {
+                                window.web3dPerformanceOptions = {
+                                    metricsEnabled: false,
+                                    prewarmEnabled: true,
+                                    dynamicDprEnabled: false,
+                                    opaqueTransitionEnabled: true,
+                                    transitionPixelRatioCap: Math.max(window.devicePixelRatio || 2.5, 3.0),
+                                    restoreDelayFrames: 0
+                                };
                                 if (window.__mtkWebglHooked) return;
                                 window.__mtkWebglHooked = true;
                                 var orig = HTMLCanvasElement.prototype.getContext;
@@ -169,6 +181,7 @@ internal class CarModelWebView(
                                         attributes.preserveDrawingBuffer = true;
                                         attributes.failIfMajorPerformanceCaveat = false;
                                         attributes.powerPreference = 'high-performance';
+                                        attributes.antialias = true;
                                     }
                                     return orig.call(this, type, attributes);
                                 };
@@ -202,6 +215,14 @@ internal class CarModelWebView(
                         Log.i("CarModelAssetDump", "Files in modelDir: $filesList")
                         val mtkPrefix = """
                             (function(){
+                                window.web3dPerformanceOptions = {
+                                    metricsEnabled: false,
+                                    prewarmEnabled: true,
+                                    dynamicDprEnabled: false,
+                                    opaqueTransitionEnabled: true,
+                                    transitionPixelRatioCap: Math.max(window.devicePixelRatio || 2.5, 3.0),
+                                    restoreDelayFrames: 0
+                                };
                                 if (!window.__mtkWebglHooked) {
                                     window.__mtkWebglHooked = true;
                                     var orig = HTMLCanvasElement.prototype.getContext;
@@ -211,6 +232,7 @@ internal class CarModelWebView(
                                             a.preserveDrawingBuffer = true;
                                             a.failIfMajorPerformanceCaveat = false;
                                             a.powerPreference = 'high-performance';
+                                            a.antialias = true;
                                         }
                                         return orig.call(this, t, a);
                                     };
@@ -229,6 +251,18 @@ internal class CarModelWebView(
                             .replace(
                                 "float outAlpha      = mix(alpha_mix, alpha_mix * alpha_base, useDeslove) * alpha * 0.5;\n                vec3  outClr        = vec3(1.0) * intensity * color;\n                // vec3 outClr         = mix(loopCol, staticCol, loop).rgb * intensity * color;\n\n                gl_FragColor = vec4(outClr, outAlpha);",
                                 "float pulse = pow(sin((vUV.y * 3.5 - uSpace * 0.45) * 3.14159) * 0.5 + 0.5, 2.5);\n                float fadeEnds = smoothstep(0.01, 0.18, vUV.y) * smoothstep(0.99, 0.72, vUV.y);\n                float outAlpha = (alpha_mix * 0.45 + pulse * 0.55) * fadeEnds * alpha * 0.90;\n                vec3  outClr = color * (0.85 + pulse * 0.95);\n                gl_FragColor = vec4(outClr, outAlpha);"
+                            )
+                            .replace(
+                                "VIEW_VALUE={default:[-.8377580409572782,1.5079644737231008]",
+                                "VIEW_VALUE={default:[-0.785398,1.32]"
+                            )
+                            .replace(
+                                "e>2?(this.offsetVerticalRate=e,this.offsetVertical=e):(this.offsetVerticalRate=e,this.offsetVertical=this.offsetVerticalRate*t)",
+                                "(this.offsetVerticalRate=0,this.offsetVertical=0)"
+                            )
+                            .replace(
+                                "this.__cur_offset__=this.offsetVertical",
+                                "this.__cur_offset__=0"
                             )
                         val bytes = patchedJs.toByteArray(Charsets.UTF_8)
                         WebResourceResponse("application/javascript", "UTF-8", ByteArrayInputStream(bytes))
@@ -784,7 +818,28 @@ internal class CarModelWebView(
         val paramStr = buildCarParamJson(modelParam).replace("'", "\\'")
         val script = """
         (function() {
-            window.IOSWebview = true;
+            window.IOSWebview = false;
+            window.AndroidWebview = true;
+            window.web3dPerformanceOptions = {
+                metricsEnabled: false,
+                prewarmEnabled: true,
+                dynamicDprEnabled: false,
+                opaqueTransitionEnabled: true,
+                transitionPixelRatioCap: Math.max(window.devicePixelRatio || 2.5, 3.0),
+                restoreDelayFrames: 0
+            };
+            window.mobile = {
+                onFirstFrame: function() { window.prompt('onFirstFrame'); },
+                onFullCarLoaded: function() { window.prompt('onFullCarLoaded'); },
+                onHighPerformance: function(r) { window.prompt('onHighPerformance', String(r)); },
+                printLog: function(log) { console.log(log); },
+                onScreenShot: function(b) { window.prompt('onScreenShot', b); },
+                onScreenShotWithBg: function(b, hide) { window.prompt('onScreenShotWithBg', b); },
+                onScreenShotWV: function(v, b) { window.prompt('onScreenShotWV', b); },
+                onTirePressurePanel: function() { window.prompt('onTirePressurePanel'); },
+                onWebGLContextLost: function() { window.prompt('onWebGLContextLost'); },
+                onWebGLContextRestored: function() { window.prompt('onWebGLContextRestored'); }
+            };
             window.onerror = function(m, s, l) { window.prompt('onJSError', m + ' @' + l); };
             window.addEventListener('unhandledrejection', function(e) {
                 window.prompt('onReject', String(e.reason && (e.reason.message || e.reason)));
@@ -863,41 +918,72 @@ internal class CarModelWebView(
                 }
             }
 
-            // 2. 保证 WebGL 画布与 HTML 背景绝对透明
+            // 2. 保证 WebGL 画布与 HTML 背景绝对透明，并锁定设备视网膜级物理全像素比
+            var dpr = Math.min(Math.max(window.devicePixelRatio || 2.5, 2.5), 3.5);
             if (v.renderer) {
                 v.renderer.setClearColor(0x000000, 0);
                 v.renderer.setClearAlpha(0);
+                v.renderer.setPixelRatio(dpr);
+                if (v.renderer.shadowMap) {
+                    v.renderer.shadowMap.enabled = true;
+                    if (window.THREE && window.THREE.PCFSoftShadowMap) {
+                        v.renderer.shadowMap.type = window.THREE.PCFSoftShadowMap;
+                    }
+                }
+            }
+            if (v.transitionQualityPolicy && typeof v.transitionQualityPolicy.configure === 'function') {
+                v.transitionQualityPolicy.configure({
+                    enabled: false,
+                    devicePixelRatio: dpr,
+                    transitionPixelRatioCap: dpr,
+                    restoreDelayFrames: 0
+                });
+            }
+            if (v.fpSetter && typeof v.fpSetter.setFPS === 'function') {
+                v.fpSetter.setFPS(60);
             }
             if (document.body) document.body.style.background = 'transparent';
             if (document.documentElement) document.documentElement.style.background = 'transparent';
 
-            // 3. 核心光学放大与视角定位：设置前侧斜 45 度黄金展车视角 (大幅抬升车身，完整显示四轮与前脸)
+            if (v.viewportSetter) {
+                v.viewportSetter.offsetVertical = 0;
+                v.viewportSetter.offsetVerticalRate = 0;
+                v.viewportSetter.__cur_offset__ = 0;
+                v.viewportSetter.setOffsetVertical = function() {};
+            }
+
+            // 3. 核心光学放大与视角定位：设置前侧斜 45 度黄金展车视角
             var cam = (v.controls && v.controls.object) || v.camera;
             var ctrl = v.controls || v.control || v.orbitControls;
 
             if (cam && ctrl) {
-                if (!v.__leapTuned) {
-                    v.__leapTuned = true;
-
-                    // 目标点设置在 y = 0.16，使车模在 155dp 紧凑展台下车轮精准距离卡片底边 25dp
-                    var target = new THREE.Vector3(0, 0.16, 0);
-                    ctrl.target.copy(target);
-
-                    // 镜头位置：前侧斜 45 度 (x = -14.5, z = 14.5, y = 1.96)，平视角度，完整展现四轮、轮毂与前脸
-                    cam.position.set(-14.5, 1.96, 14.5);
-                    cam.lookAt(target);
-
-                    // 固化控制器坐标与默认视角
-                    if (ctrl.target0) ctrl.target0.copy(target);
-                    if (ctrl.position0) ctrl.position0.set(-14.5, 1.96, 14.5);
-                    if (typeof ctrl.saveState === 'function') ctrl.saveState();
-                    if (typeof ctrl.update === 'function') ctrl.update();
-
-                    console.log('3D Golden front-45 angle set: cam=(-14.5, 1.96, 14.5), target=(0, 0.16, 0)');
+                // 清除官方全车加载后自发运行的正侧面补间动画
+                if (window.car && window.car.__viewAnimSet__ && typeof window.car.__viewAnimSet__.clear === 'function') {
+                    window.car.__viewAnimSet__.clear();
                 }
 
-                // 再缩小 1/10 (1.025 * 0.9 = 0.9225)，视野更舒适精致
-                var targetZoom = 0.9225;
+                // 目标点瞄准车身中心高度 y = 0.85，纯三维视角促使车模成像重心平稳下移沉降
+                var target = new THREE.Vector3(0, 0.85, 0);
+                ctrl.target.copy(target);
+
+                // 镜头位置：黄金 12 度俯视角且拉近至 15.5m 展车距离 (x = -10.8, y = 3.0, z = 10.8)，放大车身体量
+                cam.position.set(-10.8, 3.0, 10.8);
+                cam.lookAt(target);
+
+                // 固化控制器坐标与默认视角
+                if (ctrl.target0) ctrl.target0.copy(target);
+                if (ctrl.position0) ctrl.position0.set(-10.8, 3.0, 10.8);
+                if (typeof ctrl.saveState === 'function') ctrl.saveState();
+                if (typeof ctrl.update === 'function') ctrl.update();
+
+                // 强制将官方 car 状态机的初始视角参数锚定在斜 45 度俯角
+                if (window.car) {
+                    window.car.__oTheta__ = -0.785398;
+                    window.car.__oPhi__ = 1.32;
+                }
+
+                // 放大光学焦距 (1.12)，使车模体量饱满大气，清晰展现轮毂与车身肌肉线条
+                var targetZoom = 1.12;
                 cam.zoom = targetZoom;
                 if (!cam.__leapZoomHooked) {
                     cam.__leapZoomHooked = true;

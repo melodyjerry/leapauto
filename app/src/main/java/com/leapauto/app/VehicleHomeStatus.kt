@@ -293,6 +293,28 @@ object VehicleHomeStatus {
         freshThresholdMs: Long = 30 * 60 * 1000L
     ): Boolean = updatedAtEpochMs > 0L && (nowEpochMs - updatedAtEpochMs) in 0..freshThresholdMs
 
+    fun formatVehicleModel(carType: String?): String {
+        val model = carType?.trim().orEmpty()
+        return when {
+            model.isBlank() -> "零跑"
+            model.startsWith("零跑") -> model
+            else -> "零跑 $model"
+        }
+    }
+
+    fun shouldShowNicknameEditIcon(
+        currentNickname: String?,
+        officialNickname: String?,
+        officialModel: String? = null
+    ): Boolean {
+        val current = currentNickname?.trim().orEmpty()
+        val official = officialNickname?.trim().orEmpty()
+        val fallbackModel = formatVehicleModel(officialModel)
+        val expectedOfficial = official.ifBlank { fallbackModel }
+
+        return current == expectedOfficial
+    }
+
     private val TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm", Locale.CHINA)
 
     private fun parseSpeed(value: String?): Double? = value

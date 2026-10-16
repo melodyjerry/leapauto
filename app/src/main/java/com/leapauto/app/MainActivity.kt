@@ -395,6 +395,7 @@ class MainActivity : ComponentActivity() {
                         if (success) {
                             runOnUiThread {
                                 selectedThemeId = ThemeManager.getActiveThemeId(this@MainActivity, session.selectedVin)
+                                vehicleImageVersion++
                             }
                         }
                     }
@@ -622,20 +623,36 @@ class MainActivity : ComponentActivity() {
 
     private fun syncThemesAndEnsureActive() {
         val vin = session.selectedVin
+        android.util.Log.i("ThemeDebug", "syncThemesAndEnsureActive: vin='$vin'")
         if (vin.isBlank()) return
         worker.execute {
             runCatching {
                 val api = LeapmotorApi(session)
-                val themes = api.listThemeList(vin)
+                var themes = api.listThemeList(vin)
+                android.util.Log.i("ThemeDebug", "syncThemesAndEnsureActive: remote themes=${themes.size}")
+                if (themes.isEmpty() && availableVehicles.size > 1) {
+                    for (other in availableVehicles) {
+                        if (other.vin != vin && other.vin.isNotBlank()) {
+                            val candidate = runCatching { api.listThemeList(other.vin) }.getOrNull()
+                            if (!candidate.isNullOrEmpty()) {
+                                themes = candidate
+                                break
+                            }
+                        }
+                    }
+                }
                 if (themes.isNotEmpty()) {
                     ThemeManager.saveThemeListCache(this@MainActivity, themes)
                 }
                 val activeThemeId = ThemeManager.getActiveThemeId(this@MainActivity, vin)
-                if (activeThemeId != ThemeManager.ORIGINAL_SKYBOX_THEME_ID && !ThemeManager.isThemeReady(this@MainActivity, activeThemeId)) {
+                val ready = ThemeManager.isThemeReady(this@MainActivity, activeThemeId)
+                android.util.Log.i("ThemeDebug", "syncThemesAndEnsureActive: activeThemeId=$activeThemeId, isReady=$ready")
+                if (activeThemeId != ThemeManager.ORIGINAL_SKYBOX_THEME_ID && !ready) {
                     val target = themes.find { it.themeId == activeThemeId }
                         ?: ThemeManager.PRESET_THEMES.find { it.themeId == activeThemeId }
                     if (target != null) {
                         val ok = ThemeManager.syncThemePackage(this@MainActivity, api, target)
+                        android.util.Log.i("ThemeDebug", "syncThemesAndEnsureActive: syncThemePackage result=$ok")
                         if (ok) {
                             runOnUiThread {
                                 selectedThemeId = activeThemeId
@@ -644,6 +661,8 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 }
+            }.onFailure { err ->
+                android.util.Log.w("ThemeDebug", "syncThemesAndEnsureActive failed", err)
             }
         }
     }
@@ -1380,6 +1399,7 @@ class MainActivity : ComponentActivity() {
                     refreshStatus()
                     refreshEnergy(force = true)
                     syncVehicleImage(session.selectedVin)
+                    syncThemesAndEnsureActive()
                 }
             } catch (e: GeetestChallengeRequiredException) {
                 runOnMain(generation) {
@@ -1426,6 +1446,7 @@ class MainActivity : ComponentActivity() {
                     refreshStatus()
                     refreshEnergy(force = true)
                     syncVehicleImage(session.selectedVin)
+                    syncThemesAndEnsureActive()
                 }
             } catch (e: Exception) {
                 val apiError = e as? ApiException
@@ -1552,23 +1573,25 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun saveWidget4x2Actions(actions: List<String>) {
-        sessionStore.saveWidget4x2Actions(actions)
         widget4x2Actions = actions
-        ControlWidget.refreshAppearance(this)
+        asyncWorker.execute {
+            sessionStore.saveWidget4x2Actions(actions)
+            ControlWidget.refreshAppearance(applicationContext)
+        }
     }
 
     private fun saveWidgetBackgroundStyle(style: Int) {
-        sessionStore.saveWidgetBackgroundStyle(style)
         widgetBackgroundStyle = style
-        ControlWidget.refreshData(this)
-        CompactControlWidget.refreshData(this)
+        asyncWorker.execute {
+            sessionStore.saveWidgetBackgroundStyle(style)
+        }
     }
 
     private fun saveWidgetOpacity(opacity: Int) {
-        sessionStore.saveWidgetOpacity(opacity)
         widgetOpacity = opacity
-        ControlWidget.refreshData(this)
-        CompactControlWidget.refreshData(this)
+        asyncWorker.execute {
+            sessionStore.saveWidgetOpacity(opacity)
+        }
     }
 
     private fun clearEnergyState() {
@@ -2072,15 +2095,24 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun savePowerType(powerType: SessionStore.VehiclePowerType) {
-        sessionStore.saveVehiclePowerType(session.selectedVin, powerType)
-        vehicleConfig = vehicleConfig.copy(powerType = powerType)
-        availableVehicles = availableVehicles.map { v ->
-            if (v.vin == session.selectedVin) v.copy(powerType = powerType) else v
+        val currentVin = session.selectedVin
+        val typeChanged = vehicleConfig.powerType != powerType
+        if (typeChanged) {
+            vehicleConfig = vehicleConfig.copy(powerType = powerType)
+            availableVehicles = availableVehicles.map { v ->
+                if (v.vin == currentVin) v.copy(powerType = powerType) else v
+            }
+            toast("已切换为${if (powerType == SessionStore.VehiclePowerType.RANGE_EXTENDER) "增程" else "纯电"}模式")
+        } else {
+            toast("已确认车辆动力类型")
         }
-        refreshStatus()
-        ControlWidget.refreshData(this)
-        CompactControlWidget.refreshData(this)
-        toast("已切换为${if (powerType == SessionStore.VehiclePowerType.RANGE_EXTENDER) "增程" else "纯电"}模式")
+        asyncWorker.execute {
+            sessionStore.saveVehiclePowerType(currentVin, powerType)
+            if (typeChanged) {
+                ControlWidget.refreshData(applicationContext)
+                refreshStatus()
+            }
+        }
     }
 
     private fun checkAndPromptPowerType(vin: String) {
@@ -2091,15 +2123,18 @@ class MainActivity : ComponentActivity() {
 
     private fun updateVehicleNickname(newNickname: String) {
         val trimmed = newNickname.trim().take(10)
+        val currentVin = session.selectedVin
         vehicleConfig = vehicleConfig.copy(nickname = trimmed)
-        sessionStore.saveVehicleConfig(session.selectedVin, vehicleConfig)
         session.selectedNickname = trimmed
-        sessionStore.save(session)
         availableVehicles = availableVehicles.map { v ->
-            if (v.vin == session.selectedVin) v.copy(nickname = trimmed) else v
+            if (v.vin == currentVin) v.copy(nickname = trimmed) else v
         }
-        ControlWidget.refreshData(this)
         toast(if (trimmed.isEmpty()) "车辆昵称已重置" else "车辆昵称已更新为：$trimmed")
+        asyncWorker.execute {
+            sessionStore.saveVehicleConfig(currentVin, vehicleConfig)
+            sessionStore.save(session)
+            ControlWidget.refreshData(applicationContext)
+        }
     }
 
     private fun maybeShowAuthorSupportPrompt() {
@@ -2901,6 +2936,7 @@ class MainActivity : ComponentActivity() {
         refreshStatus()
         refreshEnergy(force = true)
         syncVehicleImage(target.vin)
+        syncThemesAndEnsureActive()
         checkAndAutoSyncBluetoothCertificate(target.vin)
         syncChargePlanFromServer(target.vin, force = true)
         checkAndPromptPowerType(target.vin)

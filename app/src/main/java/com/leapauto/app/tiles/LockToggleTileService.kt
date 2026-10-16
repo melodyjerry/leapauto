@@ -23,6 +23,16 @@ class LockToggleTileService : TileService() {
 
     private val mainHandler = Handler(Looper.getMainLooper())
 
+    override fun onTileAdded() {
+        super.onTileAdded()
+        TilePromptHelper.setTileAdded(applicationContext, TilePromptHelper.TileType.LOCK, true)
+    }
+
+    override fun onTileRemoved() {
+        super.onTileRemoved()
+        TilePromptHelper.setTileAdded(applicationContext, TilePromptHelper.TileType.LOCK, false)
+    }
+
     override fun onStartListening() {
         super.onStartListening()
         updateTileState(inProgress = false)

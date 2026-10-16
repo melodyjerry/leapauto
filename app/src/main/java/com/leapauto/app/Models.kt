@@ -121,6 +121,7 @@ data class Vehicle(
     val carType: String,
     val hvacCapability: HvacCapability = HvacCapability.fallback(),
     val nickname: String = "",
+    val officialNickname: String = nickname,
     val year: String = "",
     val color: String = "",
     val powerType: SessionStore.VehiclePowerType = SessionStore.VehiclePowerType.PURE_ELECTRIC,
@@ -131,6 +132,7 @@ data class Vehicle(
         put("carType", carType)
         put("hvacCapability", hvacCapability.toJson())
         put("nickname", nickname)
+        put("officialNickname", officialNickname)
         put("year", year)
         put("color", color)
         put("powerType", powerType.name)
@@ -138,20 +140,25 @@ data class Vehicle(
     }
 
     companion object {
-        fun fromJson(json: JSONObject): Vehicle = Vehicle(
-            vin = json.optString("vin"),
-            carType = json.optString("carType"),
-            hvacCapability = json.optJSONObject("hvacCapability")?.let { HvacCapability.fromJson(it) }
-                ?: HvacCapability.fallback(),
-            nickname = json.optString("nickname"),
-            year = json.optString("year"),
-            color = json.optString("color"),
-            powerType = json.optString("powerType").let {
-                runCatching { SessionStore.VehiclePowerType.valueOf(it) }
-                    .getOrDefault(SessionStore.VehiclePowerType.PURE_ELECTRIC)
-            },
-            isSharedAccount = json.optBoolean("isSharedAccount", false)
-        )
+        fun fromJson(json: JSONObject): Vehicle {
+            val nick = json.optString("nickname")
+            val offNick = json.optString("officialNickname").ifEmpty { nick }
+            return Vehicle(
+                vin = json.optString("vin"),
+                carType = json.optString("carType"),
+                hvacCapability = json.optJSONObject("hvacCapability")?.let { HvacCapability.fromJson(it) }
+                    ?: HvacCapability.fallback(),
+                nickname = nick,
+                officialNickname = offNick,
+                year = json.optString("year"),
+                color = json.optString("color"),
+                powerType = json.optString("powerType").let {
+                    runCatching { SessionStore.VehiclePowerType.valueOf(it) }
+                        .getOrDefault(SessionStore.VehiclePowerType.PURE_ELECTRIC)
+                },
+                isSharedAccount = json.optBoolean("isSharedAccount", false)
+            )
+        }
     }
 }
 
@@ -277,8 +284,8 @@ class Session(
     var hvacCapability: HvacCapability = HvacCapability.fallback(),
     val generation: Long = 0L
 ) {
-    val appVersion = "1.22.96"
-    val subVersion = "3.21.3-2"
+    val appVersion = "1.23.00"
+    val subVersion = "3.24.5-1"
 }
 
 /** 控车命令预设（与 leap-cn-mcp commandPresets 一致）。 */

@@ -351,7 +351,51 @@ object VehicleImageCache {
         }
         prefs.edit().putString("$KEY_PREFIX_META$vin", metaJson.toString()).apply()
 
-        // 尝试拉取 3D 模型双包（若元数据包含 h5Key，协同拉取并合并 srcKey）
+        // 1. 优先确保轻量 2D 原厂定妆照（约 290KB）极速立现，让首卡在毫秒级呈现完整爱车
+        var imageUpdated = false
+        if (cachedUrl != url || !file.exists() || file.length() == 0L) {
+            try {
+                Log.i(TAG, "优先从 CDN 下载 2D 车辆定妆照: $url")
+                val candidateUrls = listOf(url, rawUrl).distinct()
+                var response: okhttp3.Response? = null
+                for (u in candidateUrls) {
+                    val req = Request.Builder().url(u).build()
+                    val resp = NetworkDebugController.httpClient().newCall(req).execute()
+                    if (resp.isSuccessful) {
+                        response = resp
+                        break
+                    }
+                    resp.close()
+                }
+                if (response != null && response.isSuccessful) {
+                    val body = response.body
+                    val bytes = body?.bytes()
+                    if (bytes != null && bytes.isNotEmpty()) {
+                        val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)
+                        if (options.outWidth > 0 && options.outHeight > 0) {
+                            val tmpFile = File(getCacheDir(context), "${vin}.tmp")
+                            FileOutputStream(tmpFile).use { it.write(bytes) }
+                            if (file.exists()) file.delete()
+                            if (!tmpFile.renameTo(file)) {
+                                tmpFile.copyTo(file, overwrite = true)
+                                tmpFile.delete()
+                            }
+                            prefs.edit().putString("$KEY_PREFIX_URL$vin", url).apply()
+                            synchronized(memoryCache) {
+                                memoryCache.remove(vin)
+                            }
+                            imageUpdated = true
+                            Log.i(TAG, "2D 车图极速同步成功: ${options.outWidth}x${options.outHeight}")
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "2D 车图下载跳过或异常", e)
+            }
+        }
+
+        // 2. 在 2D 车图就绪保障下，平稳异步拉取 12MB 的 3D 模型资产双包
         var modelPackageUpdated = false
         meta.h5Key?.let { h5Key ->
             try {
@@ -363,70 +407,6 @@ object VehicleImageCache {
             }
         }
 
-        if (cachedUrl == url && file.exists() && file.length() > 0) {
-            Log.d(TAG, "车图 URL 未变化且本地已有缓存: $url")
-            return modelPackageUpdated
-        }
-
-        return try {
-            Log.i(TAG, "开始从 CDN 下载车辆图片: $url")
-            val candidateUrls = listOf(url, rawUrl).distinct()
-            var response: okhttp3.Response? = null
-            for (u in candidateUrls) {
-                val req = Request.Builder().url(u).build()
-                val resp = NetworkDebugController.httpClient().newCall(req).execute()
-                if (resp.isSuccessful) {
-                    response = resp
-                    break
-                }
-                resp.close()
-            }
-            if (response == null || !response.isSuccessful) {
-                val errorMsg = "CDN 下载失败: HTTP ${response?.code ?: "-"}"
-                Log.e(TAG, errorMsg)
-                return false
-            }
-
-            val body = response.body ?: return false
-            val bytes = body.bytes()
-            if (bytes.isEmpty()) {
-                Log.e(TAG, "CDN 返回图片内容为空")
-                return false
-            }
-
-            val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-            BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)
-            if (options.outWidth <= 0 || options.outHeight <= 0) {
-                Log.e(TAG, "下载的字节不是有效图像")
-                return false
-            }
-
-            val tmpFile = File(getCacheDir(context), "${vin}.tmp")
-            FileOutputStream(tmpFile).use { it.write(bytes) }
-            if (file.exists()) file.delete()
-            if (!tmpFile.renameTo(file)) {
-                tmpFile.copyTo(file, overwrite = true)
-                tmpFile.delete()
-            }
-
-            prefs.edit().putString("$KEY_PREFIX_URL$vin", url).apply()
-            synchronized(memoryCache) {
-                memoryCache.remove(vin)
-            }
-            val successMsg = buildString {
-                appendLine("车图同步成功: ${options.outWidth}x${options.outHeight}")
-                appendLine("来源接口: ${meta.sourceUrl}")
-                appendLine("图片地址: $url")
-                if (meta.rawData != null) {
-                    appendLine("接口返回原始数据: ${meta.rawData}")
-                }
-            }
-            Log.i(TAG, successMsg)
-            true
-        } catch (e: Exception) {
-            val err = "车图下载异常: ${e.message}"
-            Log.e(TAG, err, e)
-            false
-        }
+        return imageUpdated || modelPackageUpdated
     }
 }

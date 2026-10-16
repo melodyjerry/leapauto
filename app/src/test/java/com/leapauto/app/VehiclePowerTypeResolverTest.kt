@@ -200,4 +200,16 @@ class VehiclePowerTypeResolverTest {
         assertEquals(RANGE_EXTENDER, VehiclePowerTypeResolver.resolve(reevConfig, "C10", null, false))
         assertEquals(RANGE_EXTENDER, VehiclePowerTypeResolver.resolve(reevConfig, "C16 EV", null, false))
     }
+
+    @Test
+    fun `savePowerType preserves confirmation state even when power type matches current config`() {
+        val workingDirectory = requireNotNull(System.getProperty("user.dir"))
+        val projectDir = generateSequence(java.io.File(workingDirectory)) { it.parentFile }
+            .first { java.io.File(it, "app").isDirectory }
+        val mainActivitySource = java.io.File(projectDir, "app/src/main/java/com/leapauto/app/MainActivity.kt").readText()
+
+        // 确保不会因为相等而提前 return 拦截持久化确认标记
+        assertFalse(mainActivitySource.contains("if (vehicleConfig.powerType == powerType) return"))
+        assertTrue(mainActivitySource.contains("sessionStore.saveVehiclePowerType(currentVin, powerType)"))
+    }
 }

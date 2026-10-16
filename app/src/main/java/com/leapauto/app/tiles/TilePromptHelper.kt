@@ -27,6 +27,29 @@ object TilePromptHelper {
         CLIMATE("空调", R.drawable.ic_phosphor_fan, ClimateTileService::class.java)
     }
 
+    private const val PREFS_NAME = "quick_tiles_state"
+    private const val KEY_TILE_ADDED_PREFIX = "tile_added_"
+
+    fun isTileAdded(context: Context, type: TileType): Boolean {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        return prefs.getBoolean(KEY_TILE_ADDED_PREFIX + type.name, false)
+    }
+
+    fun setTileAdded(context: Context, type: TileType, added: Boolean) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit().putBoolean(KEY_TILE_ADDED_PREFIX + type.name, added).apply()
+    }
+
+    fun promptRemoveTile(context: Context, type: TileType, onStateChanged: (() -> Unit)? = null) {
+        setTileAdded(context, type, false)
+        onStateChanged?.invoke()
+        Toast.makeText(
+            context,
+            "请下拉通知栏控制中心 -> 点击「编辑」即可移出【${type.title}】",
+            Toast.LENGTH_LONG
+        ).show()
+    }
+
     fun isSupported(): Boolean = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
 
     fun requestTilesUpdate(context: Context) {
@@ -52,6 +75,9 @@ object TilePromptHelper {
                 sbm.requestAddTileService(component, type.title, icon, executor) { statusCode ->
                     val success = statusCode == StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ADDED
                     val alreadyAdded = statusCode == StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ALREADY_ADDED
+                    if (success || alreadyAdded) {
+                        setTileAdded(context, type, true)
+                    }
                     if (success) {
                         Toast.makeText(context, "已成功添加【${type.title}】至下拉控制中心", Toast.LENGTH_SHORT).show()
                     } else if (alreadyAdded) {

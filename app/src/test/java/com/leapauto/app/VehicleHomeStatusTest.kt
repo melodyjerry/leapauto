@@ -334,6 +334,27 @@ class VehicleHomeStatusTest {
         assertTrue(mainActivity.contains("800L"))
     }
 
+    @Test
+    fun `nickname edit icon is displayed only when vehicle nickname matches official nickname`() {
+        // 1. 官方接口提供了昵称，当前昵称与官方一致 -> 显示小铅笔
+        assertTrue(VehicleHomeStatus.shouldShowNicknameEditIcon("小蓝", "小蓝", "C10"))
+        assertTrue(VehicleHomeStatus.shouldShowNicknameEditIcon("零跑C10", "零跑C10", "C10"))
+
+        // 2. 官方接口未提供独立昵称，退化为官方车型名，当前昵称与官方车型名一致 -> 显示小铅笔
+        assertTrue(VehicleHomeStatus.shouldShowNicknameEditIcon("零跑 C10", "", "C10"))
+        assertTrue(VehicleHomeStatus.shouldShowNicknameEditIcon("零跑 C10", null, "C10"))
+
+        // 3. 用户修改了昵称，与官方接口提供的不一致 -> 不显示小铅笔
+        assertFalse(VehicleHomeStatus.shouldShowNicknameEditIcon("我的大白", "小蓝", "C10"))
+        assertFalse(VehicleHomeStatus.shouldShowNicknameEditIcon("我的大白", "", "C10"))
+        assertFalse(VehicleHomeStatus.shouldShowNicknameEditIcon("极速战车", null, "C10"))
+
+        val projectDir = projectDirectory()
+        val screenSource = java.io.File(projectDir, "app/src/main/java/com/leapauto/app/ui/LeapAutoScreen.kt").readText()
+        assertTrue(screenSource.contains("VehicleHomeStatus.shouldShowNicknameEditIcon(nickname, officialNickname, vehicleModel)"))
+        assertTrue(screenSource.contains("R.drawable.ic_edit"))
+    }
+
     private fun projectDirectory(): java.io.File {
         val workingDirectory = requireNotNull(System.getProperty("user.dir"))
         return generateSequence(java.io.File(workingDirectory)) { it.parentFile }

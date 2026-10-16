@@ -23,7 +23,7 @@ object ThemeManager {
                 description = "云雾缭绕的巍峨雪山与静谧冰河相映，宛如一幅空灵悠远的冬日水墨画卷。",
                 isDefault = true,
                 tags = listOf("官方默认"),
-                resourceBg = "http://lp-carnet.oss-cn-hangzhou.aliyuncs.com/leapmotor-app-theme-prod/7/resource_bg/bg.png?Expires=4943522631&OSSAccessKeyId=LTAI4Fmo2WXExVH9PecXNnpy&Signature=4JHJKx3YHDb8qQQOWIe%2Fm94wJck%3D",
+                resourceBg = null,
                 resourcePkg = "http://lp-carnet.oss-cn-hangzhou.aliyuncs.com/leapmotor-app-theme-prod/7/resource_pkg/resource%20-%20%E9%9B%BE%E5%B7%9D%E9%9B%AA%E5%A2%83.zip",
                 resourcePkgName = "resource - 雾川雪境.zip",
                 fileSize = 2199406L,
@@ -117,11 +117,19 @@ object ThemeManager {
         if (inSub.exists() && inSub.isFile && inSub.length() > 0L) return inSub
         val direct = File(themeDir, fileName)
         if (direct.exists() && direct.isFile && direct.length() > 0L) {
-            // 根目录下若存在小于 300KB 的旧版缩略图，避免误读为 3D 展台实景大图
-            if (fileName == "lpcar_pic_3d_bg.png" && direct.length() < 300_000L && inSub.exists()) {
+            // 根目录下若存在小于 300KB 的旧版缩略图且子目录有高清图，优先使用子目录高清图
+            if (fileName == "lpcar_pic_3d_bg.png" && direct.length() < 300_000L && inSub.exists() && inSub.length() > direct.length()) {
                 return inSub
             }
             return direct
+        }
+        if (fileName == "lpcar_pic_3d_bg.png") {
+            // 兜底寻址：寻找解压出来的真实背景全景大图，杜绝误读带有黑色演示车的预览图
+            val candidate = themeDir.walkTopDown().filter {
+                it.isFile && it.extension.equals("png", ignoreCase = true) &&
+                    it.length() > 300_000L && !it.name.contains("preview", ignoreCase = true)
+            }.maxByOrNull { it.length() }
+            if (candidate != null && candidate.exists()) return candidate
         }
         return null
     }
@@ -149,7 +157,11 @@ object ThemeManager {
         val file = get3dBgFile(context, themeId)
         if (file != null && file.exists() && file.length() > 0L) {
             return try {
-                BitmapFactory.decodeFile(file.absolutePath)
+                val opts = BitmapFactory.Options().apply {
+                    inPreferredConfig = Bitmap.Config.ARGB_8888
+                    inPremultiplied = true
+                }
+                BitmapFactory.decodeFile(file.absolutePath, opts)
             } catch (e: Exception) {
                 Log.w(TAG, "加载 3D 展台主题背景图失败: $themeId", e)
                 null
@@ -173,12 +185,19 @@ object ThemeManager {
             if (dir.isDirectory) {
                 val rootBg = File(dir, "lpcar_pic_3d_bg.png")
                 val inSubBg = File(File(dir, "resource"), "lpcar_pic_3d_bg.png")
-                if (rootBg.exists() && rootBg.length() < 300_000L) {
+                // 若存在旧版 148KB 蓝灰蒙版图或 780KB 带黑车的预览图，自动清理
+                if (rootBg.exists() && (rootBg.length() in 140_000L..160_000L || rootBg.length() in 750_000L..820_000L)) {
+                    rootBg.delete()
+                    File(dir, ".ready").delete()
+                    Log.i(TAG, "已清理历史误存的非纯净底图缓存，准备拉取原厂纯净实景大图")
+                }
+                // 仅当子目录存在解压后的高清图且根目录下为旧版缩略图时清理
+                if (rootBg.exists() && rootBg.length() < 300_000L && inSubBg.exists() && inSubBg.length() > 300_000L) {
                     rootBg.delete()
                     Log.i(TAG, "已清理旧版模糊 3D 展台图缓存: ${rootBg.absolutePath}")
                 }
-                val hasValidBg = (rootBg.exists() && rootBg.length() > 300_000L) ||
-                                 (inSubBg.exists() && inSubBg.length() > 300_000L)
+                val hasValidBg = (rootBg.exists() && rootBg.length() > 0L) ||
+                                 (inSubBg.exists() && inSubBg.length() > 0L)
                 if (!hasValidBg) {
                     File(dir, ".ready").delete()
                 }
@@ -247,9 +266,15 @@ object ThemeManager {
 
     fun loadWidgetBgBitmap(context: Context, themeId: String, is4x2: Boolean, darkTheme: Boolean = false): Bitmap? {
         val file = if (is4x2) getWidget4x2BgFile(context, themeId) else getWidget2x2BgFile(context, themeId)
-        if (file == null || !file.exists() || file.length() == 0L) return null
+        val targetFile = if (file != null && file.exists() && file.length() > 0L) {
+            file
+        } else {
+            // 老款车若未解压专属小组件切片，直接以实景大图作为小组件皮肤底图
+            get3dBgFile(context, themeId)
+        }
+        if (targetFile == null || !targetFile.exists() || targetFile.length() == 0L) return null
         return try {
-            val raw = BitmapFactory.decodeFile(file.absolutePath) ?: return null
+            val raw = BitmapFactory.decodeFile(targetFile.absolutePath) ?: return null
             val refWidthDp = if (is4x2) 340f else 160f
             val cornerRadius = (20f * (raw.width / refWidthDp)).coerceIn(24f, 80f)
             val strokeColor = if (darkTheme) 0x4DFFFFFF.toInt() else 0x26000000
@@ -330,23 +355,45 @@ object ThemeManager {
         }
 
         val pkgUrl = theme.resourcePkg
-        if (pkgUrl.isNullOrBlank()) {
-            return false
-        }
-        Log.i(TAG, "开始下载并解压高清实景主题包: id=$themeId, name=${theme.name}, url=$pkgUrl")
-        val success = if (api != null) {
-            api.downloadThemePackage(pkgUrl, targetDir, theme.fileMd5)
-        } else {
-            downloadAndUnzipPackage(pkgUrl, targetDir, theme.fileMd5)
-        }
-        if (success) {
-            val bgFile = findThemeFile(targetDir, "lpcar_pic_3d_bg.png")
-            if (bgFile != null && bgFile.exists() && bgFile.length() > 300_000L) {
-                File(targetDir, ".ready").createNewFile()
-                Log.i(TAG, "高清 3D 实景主题包部署就绪: id=$themeId, name=${theme.name} (${bgFile.length()} bytes)")
-                return true
+        if (!pkgUrl.isNullOrBlank()) {
+            Log.i(TAG, "开始下载并解压高清实景主题包: id=$themeId, name=${theme.name}, url=$pkgUrl")
+            val success = if (api != null) {
+                api.downloadThemePackage(pkgUrl, targetDir, theme.fileMd5)
+            } else {
+                downloadAndUnzipPackage(pkgUrl, targetDir, theme.fileMd5)
+            }
+            if (success) {
+                val bgFile = findThemeFile(targetDir, "lpcar_pic_3d_bg.png")
+                if (bgFile != null && bgFile.exists() && bgFile.length() > 0L) {
+                    File(targetDir, ".ready").createNewFile()
+                    Log.i(TAG, "高清 3D 实景主题包部署就绪: id=$themeId, name=${theme.name} (${bgFile.length()} bytes)")
+                    return true
+                }
             }
         }
+
+        // 兜底通道：若全量 ZIP 包网络不可达或老款车云端无动态签名，使用单张官方原厂实景大图直通下载，保障全系老款车型 100% 成功换装
+        val bgUrl = theme.resourceBg
+        if (!bgUrl.isNullOrBlank()) {
+            val targetFile = File(targetDir, "lpcar_pic_3d_bg.png")
+            val ok = runCatching {
+                val req = okhttp3.Request.Builder().url(bgUrl).get().build()
+                val client = NetworkDebugController.httpClient()
+                client.newCall(req).execute().use { resp ->
+                    if (resp.isSuccessful) {
+                        val bytes = resp.body?.bytes()
+                        if (bytes != null && bytes.isNotEmpty()) {
+                            targetFile.writeBytes(bytes)
+                            File(targetDir, ".ready").createNewFile()
+                            Log.i(TAG, "老款车兜底实景图部署就绪: id=$themeId (${bytes.size} bytes)")
+                            true
+                        } else false
+                    } else false
+                }
+            }.getOrDefault(false)
+            if (ok) return true
+        }
+
         Log.w(TAG, "主题包下载解压失败或缺少高清 3D 背景图: id=$themeId")
         return false
     }

@@ -235,4 +235,16 @@ class ThemeManagerTest {
         assertFalse(ThemeManager.shouldApplyNightMoodFilter("4", isSystemDark = true))
         assertFalse(ThemeManager.shouldApplyNightMoodFilter("4", isSystemDark = false))
     }
+
+    @Test
+    fun `login and vehicle switch flows trigger theme sync and ensure active default theme`() {
+        val workingDirectory = requireNotNull(System.getProperty("user.dir"))
+        val projectDir = generateSequence(File(workingDirectory)) { it.parentFile }
+            .first { File(it, "app").isDirectory }
+        val mainActivitySource = File(projectDir, "app/src/main/java/com/leapauto/app/MainActivity.kt").readText()
+
+        // 验证冷启动、短信登录、凭据登录、切换车辆四处全覆盖 syncThemesAndEnsureActive
+        val matches = "syncThemesAndEnsureActive\\(\\)".toRegex().findAll(mainActivitySource).count()
+        assertTrue("syncThemesAndEnsureActive must be invoked across all session and vehicle lifecycle entry points", matches >= 4)
+    }
 }

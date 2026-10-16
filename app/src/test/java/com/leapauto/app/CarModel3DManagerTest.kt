@@ -206,14 +206,16 @@ class CarModel3DManagerTest {
             .first { File(it, "app").isDirectory }
         val viewSource = File(projectDir, "app/src/main/java/com/leapauto/app/ui/CarModel3DView.kt").readText()
 
-        assertTrue(viewSource.contains("targetZoom = 0.9225"))
+        assertTrue(viewSource.contains("targetZoom = 1.12"))
         assertTrue(viewSource.contains("cam.updateProjectionMatrix()"))
-        assertTrue(viewSource.contains("cam.position.set(-14.5, 1.96, 14.5)"))
+        assertTrue(viewSource.contains("cam.position.set(-10.8, 3.0, 10.8)"))
         assertTrue(viewSource.contains("ctrl.target.copy(target)"))
         assertTrue(viewSource.contains("v.renderer.setClearColor(0x000000, 0)"))
         assertTrue(viewSource.contains("v.renderer.setClearAlpha(0)"))
         assertTrue(viewSource.contains("v.scene.background = null"))
         assertTrue(viewSource.contains("c.visible = false"))
+        assertTrue(viewSource.contains("VIEW_VALUE={default:[-0.785398,1.32]"))
+        assertTrue(viewSource.contains("(this.offsetVerticalRate=0,this.offsetVertical=0)"))
     }
 
     @Test
@@ -551,5 +553,73 @@ class CarModel3DManagerTest {
         assertFalse(CarModel3DStateHelper.isChargingAnimationActive(6)) // 充电暂停
         assertFalse(CarModel3DStateHelper.isChargingAnimationActive(null as Int?))
         assertFalse(CarModel3DStateHelper.isChargingAnimationActive(null as VehicleStatus?))
+    }
+
+    @Test
+    fun `3d rendering enforces retina dpr and high performance options without lock 30fps`() {
+        val workingDirectory = requireNotNull(System.getProperty("user.dir"))
+        val projectDir = generateSequence(File(workingDirectory)) { it.parentFile }
+            .first { File(it, "app").isDirectory }
+        val viewSource = File(projectDir, "app/src/main/java/com/leapauto/app/ui/CarModel3DView.kt").readText()
+
+        // 验证 WebGL 注入性能与视网膜高精度参数
+        assertTrue(viewSource.contains("window.web3dPerformanceOptions = {"))
+        assertTrue(viewSource.contains("dynamicDprEnabled: false"))
+        assertTrue(viewSource.contains("transitionPixelRatioCap: Math.max(window.devicePixelRatio || 2.5, 3.0)"))
+        assertTrue(viewSource.contains("attributes.antialias = true"))
+
+        // 验证解除 IOSWebview 30FPS 锁帧
+        assertFalse(viewSource.contains("window.IOSWebview = true;"))
+        assertTrue(viewSource.contains("window.AndroidWebview = true;"))
+        assertTrue(viewSource.contains("v.renderer.setPixelRatio(dpr);"))
+    }
+
+    @Test
+    fun `progressive loading prioritizes 2d car picture before heavy 3d model download`() {
+        val workingDirectory = requireNotNull(System.getProperty("user.dir"))
+        val projectDir = generateSequence(File(workingDirectory)) { it.parentFile }
+            .first { File(it, "app").isDirectory }
+        val cacheSource = File(projectDir, "app/src/main/java/com/leapauto/app/VehicleImageCache.kt").readText()
+
+        val download2dIndex = cacheSource.indexOf("优先从 CDN 下载 2D 车辆定妆照")
+        val download3dIndex = cacheSource.indexOf("平稳异步拉取 12MB 的 3D 模型资产双包")
+
+        assertTrue("2D car image download must be present", download2dIndex >= 0)
+        assertTrue("3D model package download must be present", download3dIndex >= 0)
+        assertTrue("2D car image must be downloaded before 3D model packages to guarantee instant visual availability", download2dIndex < download3dIndex)
+    }
+
+    @Test
+    fun `3d rendered state does not reset on vehicleImageVersion increment and webview synchronizes ready state`() {
+        val workingDirectory = requireNotNull(System.getProperty("user.dir"))
+        val projectDir = generateSequence(File(workingDirectory)) { it.parentFile }
+            .first { File(it, "app").isDirectory }
+        val screenSource = File(projectDir, "app/src/main/java/com/leapauto/app/ui/LeapAutoScreen.kt").readText()
+        val viewSource = File(projectDir, "app/src/main/java/com/leapauto/app/ui/CarModel3DView.kt").readText()
+
+        // 验证 is3DRendered 状态严格解绑 vehicleImageVersion
+        assertTrue(screenSource.contains("var is3DRendered by remember(h5Key, srcKey)"))
+        assertFalse(screenSource.contains("var is3DRendered by remember(h5Key, srcKey, vehicleImageVersion)"))
+
+        // 验证 AndroidView.update 中双向纠偏就绪态
+        assertTrue(viewSource.contains("if (webView.isReady)"))
+        assertTrue(viewSource.contains("onReady()"))
+    }
+
+    @Test
+    fun `quick action button and hero texts dynamically adapt contrast across light and dark themes`() {
+        val workingDirectory = requireNotNull(System.getProperty("user.dir"))
+        val projectDir = generateSequence(File(workingDirectory)) { it.parentFile }
+            .first { File(it, "app").isDirectory }
+        val screenSource = File(projectDir, "app/src/main/java/com/leapauto/app/ui/LeapAutoScreen.kt").readText()
+
+        // 验证车模上方文字对比度绑定 isHeroDark
+        assertTrue(screenSource.contains("heroPrimaryTextColor = if (isHeroDark) Color.White else Color(0xFF141923)"))
+        assertTrue(screenSource.contains("heroSecondaryTextColor = if (isHeroDark) Color.White.copy(alpha = 0.90f) else Color(0xFF4A5568)"))
+
+        // 验证快捷操作按钮文字注入微柔光阴影与 isHeroDark 贯穿
+        assertTrue(screenSource.contains("isHeroDark: Boolean = false"))
+        assertTrue(screenSource.contains("normalActionContentColor = if (isHeroDark) Color.White else Color(0xFF141923)"))
+        assertTrue(screenSource.contains("blurRadius = 3f"))
     }
 }

@@ -24,6 +24,16 @@ class HornTileService : TileService() {
 
     private val mainHandler = Handler(Looper.getMainLooper())
 
+    override fun onTileAdded() {
+        super.onTileAdded()
+        TilePromptHelper.setTileAdded(applicationContext, TilePromptHelper.TileType.HORN, true)
+    }
+
+    override fun onTileRemoved() {
+        super.onTileRemoved()
+        TilePromptHelper.setTileAdded(applicationContext, TilePromptHelper.TileType.HORN, false)
+    }
+
     override fun onStartListening() {
         super.onStartListening()
         updateTileState(inProgress = false)

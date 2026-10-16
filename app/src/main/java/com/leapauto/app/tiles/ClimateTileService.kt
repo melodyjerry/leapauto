@@ -22,6 +22,16 @@ class ClimateTileService : TileService() {
 
     private val mainHandler = Handler(Looper.getMainLooper())
 
+    override fun onTileAdded() {
+        super.onTileAdded()
+        TilePromptHelper.setTileAdded(applicationContext, TilePromptHelper.TileType.CLIMATE, true)
+    }
+
+    override fun onTileRemoved() {
+        super.onTileRemoved()
+        TilePromptHelper.setTileAdded(applicationContext, TilePromptHelper.TileType.CLIMATE, false)
+    }
+
     override fun onStartListening() {
         super.onStartListening()
         updateTileState(inProgress = false)

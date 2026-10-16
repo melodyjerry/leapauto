@@ -154,6 +154,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.RectangleShape
@@ -297,7 +298,8 @@ private enum class ScreenDestination(val navigationOrder: Int) {
     HOME(1),
     LOCATION_DETAIL(2),
     CLIMATE_CONTROL(2),
-    ACCOUNT(3)
+    ACCOUNT(3),
+    AUTHOR_SUPPORT(4)
 }
 
 private enum class EnergyHomePage {
@@ -428,18 +430,21 @@ fun LeapAutoScreen(
     var settingsTitleTapCount by remember(loggedIn, selectedTab) { mutableIntStateOf(0) }
     var showVehicleLocation by rememberSaveable { mutableStateOf(false) }
     var showClimateControl by rememberSaveable { mutableStateOf(false) }
+    var showAuthorSupportScreen by rememberSaveable { mutableStateOf(false) }
     var showHealthyChargingSheet by rememberSaveable { mutableStateOf(false) }
     var showVehicleHealthCheckSheet by rememberSaveable { mutableStateOf(false) }
     var showLogoutConfirmationDialog by rememberSaveable { mutableStateOf(false) }
 
     val destination = when {
         !loggedIn -> ScreenDestination.LOGIN
+        showAuthorSupportScreen -> ScreenDestination.AUTHOR_SUPPORT
         showVehicleLocation && selectedTab == MainNavigationTabs.VEHICLE -> ScreenDestination.LOCATION_DETAIL
         showClimateControl && selectedTab == MainNavigationTabs.VEHICLE -> ScreenDestination.CLIMATE_CONTROL
         selectedTab == MainNavigationTabs.ACCOUNT -> ScreenDestination.ACCOUNT
         else -> ScreenDestination.HOME
     }
     val appBarTitle = when {
+        loggedIn && showAuthorSupportScreen -> "支持作者"
         loggedIn && showVehicleLocation -> "车辆位置"
         loggedIn && showClimateControl -> "空调"
         loggedIn -> when (selectedTab) {
@@ -456,7 +461,8 @@ fun LeapAutoScreen(
 
     val hasSubpage = selectedTab == MainNavigationTabs.ACCOUNT ||
         showVehicleLocation ||
-        showClimateControl
+        showClimateControl ||
+        showAuthorSupportScreen
     val updatePromptRelease = (versionUpdateState as? VersionUpdateState.UpdateAvailable)?.latestRelease
     val shouldShowVersionUpdatePrompt = updatePromptRelease != null &&
         VersionUpdatePromptPolicy.shouldShow(
@@ -473,7 +479,9 @@ fun LeapAutoScreen(
         showVehicleConfigConfirmationPrompt || showSessionExpiredDialog || showAuthorSupportDialog ||
         shouldShowVersionUpdatePrompt || (showPowerTypeDialog && !pinSetupInProgress)
     val closeSubpage: () -> Unit = {
-        if (selectedTab == MainNavigationTabs.ACCOUNT) {
+        if (showAuthorSupportScreen) {
+            showAuthorSupportScreen = false
+        } else if (selectedTab == MainNavigationTabs.ACCOUNT) {
             selectedTab = MainNavigationTabs.VEHICLE
         } else {
             showVehicleLocation = false
@@ -491,6 +499,7 @@ fun LeapAutoScreen(
         if (!loggedIn) {
             showVehicleLocation = false
             showClimateControl = false
+            showAuthorSupportScreen = false
         }
         onAutoRefreshActiveChange(loggedIn && selectedTab == MainNavigationTabs.VEHICLE)
     }
@@ -800,14 +809,14 @@ fun LeapAutoScreen(
             topBar = {
                 if (destination != ScreenDestination.HOME && destination != ScreenDestination.LOGIN) {
                     TopAppBar(
-                        navigationIcon = if (showVehicleLocation || showClimateControl ||
+                        navigationIcon = if (showAuthorSupportScreen || showVehicleLocation || showClimateControl ||
                             selectedTab == MainNavigationTabs.ACCOUNT
                         ) {
                             {
                                 IconButton(onClick = closeSubpage) {
                                     Icon(
                                         painterResource(R.drawable.ic_phosphor_arrow_left),
-                                        contentDescription = "返回爱车",
+                                        contentDescription = if (showAuthorSupportScreen) "返回设置" else "返回爱车",
                                         tint = MaterialTheme.colorScheme.onSurface
                                     )
                                 }
@@ -917,6 +926,7 @@ fun LeapAutoScreen(
                             selectedTab = MainNavigationTabs.ACCOUNT
                             showVehicleLocation = false
                             showClimateControl = false
+                            showAuthorSupportScreen = false
                         },
                         vehicleImageVersion = vehicleImageVersion,
                         availableVehicles = availableVehicles,
@@ -1022,8 +1032,12 @@ fun LeapAutoScreen(
                                 onBluetoothKeyFeatureEnabledChange = onBluetoothKeyFeatureEnabledChange,
                                 onOpenBluetoothKey = onOpenBluetoothKey,
                                 onPowerTypeChange = onPowerTypeChange,
+                                onOpenAuthorSupport = { showAuthorSupportScreen = true },
                                 onLogout = { showLogoutConfirmationDialog = true }
                             )
+                        }
+                        ScreenDestination.AUTHOR_SUPPORT -> {
+                            AuthorSupportContent()
                         }
                     }
                 }
@@ -1710,6 +1724,7 @@ private fun MyContent(
     onPowerTypeChange: (SessionStore.VehiclePowerType) -> Unit = {},
     selectedThemeId: String = ThemeManager.DEFAULT_THEME_ID,
     onSelectedThemeChange: (String) -> Unit = {},
+    onOpenAuthorSupport: () -> Unit = {},
     onLogout: () -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -1724,7 +1739,18 @@ private fun MyContent(
             val api = runCatching { LeapmotorApi(store.load()) }.getOrNull()
             if (api != null) {
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                    val remote = runCatching { api.listThemeList(vehicleVin) }.getOrNull()
+                    var remote = runCatching { api.listThemeList(vehicleVin) }.getOrNull()
+                    if (remote.isNullOrEmpty() && availableVehicles.size > 1) {
+                        for (other in availableVehicles) {
+                            if (other.vin != vehicleVin && other.vin.isNotBlank()) {
+                                val candidate = runCatching { api.listThemeList(other.vin) }.getOrNull()
+                                if (!candidate.isNullOrEmpty()) {
+                                    remote = candidate
+                                    break
+                                }
+                            }
+                        }
+                    }
                     if (!remote.isNullOrEmpty()) {
                         ThemeManager.saveThemeListCache(context, remote)
                         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
@@ -1920,6 +1946,11 @@ private fun MyContent(
             onCheckForUpdate = onCheckForUpdate,
             onOpenUpdate = onOpenUpdate,
             onStartInAppUpdate = onStartInAppUpdate
+        )
+
+        // 6.5 支持作者
+        SupportAuthorCard(
+            onClick = onOpenAuthorSupport
         )
 
         // 7. 开源代码仓库
@@ -2170,7 +2201,7 @@ private fun PowerTypeConfigCard(
                     val isSelected = currentPowerType == option.first
                     SegmentedButton(
                         shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size),
-                        onClick = { onPowerTypeChange(option.first) },
+                        onClick = { if (currentPowerType != option.first) onPowerTypeChange(option.first) },
                         selected = isSelected,
                         icon = {},
                         colors = SegmentedButtonDefaults.colors(
@@ -2279,11 +2310,6 @@ private fun OpenSourceCodeCard() {
                     "本应用代码已开源 · 点击访问 GitHub 仓库",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    "github.com/stephenwang1011/leapauto",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary
                 )
             }
             Icon(
@@ -2475,6 +2501,176 @@ private fun AuthorSupportDialog(onDismiss: () -> Unit, onDisable: () -> Unit) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SupportAuthorCard(onClick: () -> Unit) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .clickable(onClick = onClick)
+            .frostedGlassCard(shape = RoundedCornerShape(16.dp)),
+        shape = RoundedCornerShape(16.dp),
+        color = Color.Transparent,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        border = glassCardBorder(),
+        shadowElevation = 0.dp
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(
+                modifier = Modifier.size(36.dp),
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_phosphor_heart),
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(8.dp)
+                )
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    "支持作者",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    "为爱发电不易 · 感谢一路相伴与支持",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Icon(
+                painter = painterResource(R.drawable.ic_phosphor_caret_right),
+                contentDescription = "支持作者",
+                modifier = Modifier.size(16.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+private fun AuthorSupportContent() {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 20.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .frostedGlassCard(
+                    shape = RoundedCornerShape(16.dp),
+                    auraColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)
+                ),
+            shape = RoundedCornerShape(16.dp),
+            color = Color.Transparent,
+            contentColor = MaterialTheme.colorScheme.onSurface,
+            border = glassCardBorder(),
+            shadowElevation = 0.dp
+        ) {
+            Column(
+                modifier = Modifier.padding(18.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_phosphor_heart),
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Text(
+                        text = "写在前面",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+                Text(
+                    text = "个人业余开发维护，纯粹为爱发电。\n若曾为你带来便利，欢迎请喝一杯咖啡。\n支持全凭自愿，感谢一路相伴。",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    lineHeight = 22.sp
+                )
+            }
+        }
+
+        PaymentQrCard(
+            title = "支付宝赞赏",
+            qrRes = R.drawable.support_alipay_qr_safe,
+            qrContentDescription = "支付宝收款码"
+        )
+
+        PaymentQrCard(
+            title = "微信赞赏",
+            qrRes = R.drawable.support_wechat_qr,
+            qrContentDescription = "微信收款码"
+        )
+
+        Spacer(Modifier.height(24.dp))
+    }
+}
+
+@Composable
+private fun PaymentQrCard(
+    title: String,
+    qrRes: Int,
+    qrContentDescription: String
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .frostedGlassCard(shape = RoundedCornerShape(16.dp)),
+        shape = RoundedCornerShape(16.dp),
+        color = Color.Transparent,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        border = glassCardBorder(),
+        shadowElevation = 0.dp
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+
+            Surface(
+                modifier = Modifier
+                    .size(220.dp)
+                    .clip(RoundedCornerShape(12.dp)),
+                shape = RoundedCornerShape(12.dp),
+                color = Color.White
+            ) {
+                Image(
+                    painter = painterResource(qrRes),
+                    contentDescription = qrContentDescription,
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(12.dp)
+                )
             }
         }
     }
@@ -3401,7 +3597,7 @@ private fun ThemeConfigCard(
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(
-                    "3D 展台与小组件主题",
+                    "主题中心",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold
                 )
@@ -3631,16 +3827,28 @@ private fun QuickSettingsTileCard() {
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 com.leapauto.app.tiles.TilePromptHelper.TileType.values().forEach { tileType ->
+                    var isTileAdded by remember(tileType) {
+                        mutableStateOf(com.leapauto.app.tiles.TilePromptHelper.isTileAdded(context, tileType))
+                    }
+                    val actionColor = if (isTileAdded) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
                     Surface(
                         modifier = Modifier
                             .weight(1f)
                             .clip(RoundedCornerShape(10.dp))
                             .clickable {
-                                com.leapauto.app.tiles.TilePromptHelper.requestAddTile(context, tileType)
+                                if (isTileAdded) {
+                                    com.leapauto.app.tiles.TilePromptHelper.promptRemoveTile(context, tileType) {
+                                        isTileAdded = false
+                                    }
+                                } else {
+                                    com.leapauto.app.tiles.TilePromptHelper.requestAddTile(context, tileType) { success ->
+                                        if (success) isTileAdded = true
+                                    }
+                                }
                             },
                         shape = RoundedCornerShape(10.dp),
-                        color = MaterialTheme.glassInsetSurface,
-                        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
+                        color = if (isTileAdded) MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.16f) else MaterialTheme.glassInsetSurface,
+                        border = BorderStroke(0.5.dp, if (isTileAdded) MaterialTheme.colorScheme.error.copy(alpha = 0.35f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
                     ) {
                         Row(
                             modifier = Modifier.padding(horizontal = 6.dp, vertical = 9.dp),
@@ -3651,14 +3859,14 @@ private fun QuickSettingsTileCard() {
                                 painter = painterResource(tileType.iconRes),
                                 contentDescription = tileType.title,
                                 modifier = Modifier.size(16.dp),
-                                tint = MaterialTheme.colorScheme.primary
+                                tint = actionColor
                             )
                             Spacer(Modifier.width(4.dp))
                             Text(
-                                text = "+ ${tileType.title}",
+                                text = if (isTileAdded) "- ${tileType.title}" else "+ ${tileType.title}",
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSurface,
+                                color = if (isTileAdded) actionColor else MaterialTheme.colorScheme.onSurface,
                                 maxLines = 1
                             )
                         }
@@ -4106,13 +4314,13 @@ fun VehicleHero(
     }
     val h5Key = cachedMeta?.h5Key
     val srcKey = cachedMeta?.srcKey
-    var is3DReady by remember(h5Key, srcKey, vehicleImageVersion) {
+    var is3DReady by remember(h5Key, srcKey) {
         mutableStateOf(h5Key != null && CarModel3DManager.isModelReady(context, h5Key, srcKey))
     }
-    var is3DRendered by remember(h5Key, srcKey, vehicleImageVersion) { mutableStateOf(false) }
-    var is3DLoadFailed by remember(h5Key, srcKey, vehicleImageVersion) { mutableStateOf(false) }
-    var is3DTimedOut by remember(h5Key, srcKey, vehicleImageVersion) { mutableStateOf(false) }
-    var prefer2DModel by remember(vehicleVin, vehicleImageVersion) { mutableStateOf(false) }
+    var is3DRendered by remember(h5Key, srcKey) { mutableStateOf(false) }
+    var is3DLoadFailed by remember(h5Key, srcKey) { mutableStateOf(false) }
+    var is3DTimedOut by remember(h5Key, srcKey) { mutableStateOf(false) }
+    var prefer2DModel by remember(vehicleVin) { mutableStateOf(false) }
     var themeList by remember(vehicleVin) {
         mutableStateOf(ThemeManager.loadCachedThemeList(context))
     }
@@ -4145,16 +4353,26 @@ fun VehicleHero(
         label = "3d_fade"
     )
 
-    // 15 秒超时倒计时：若 15 秒内未渲染完成，自动提示超时并提供重试与使用 2D 车图选项
-    androidx.compose.runtime.LaunchedEffect(h5Key, srcKey, vehicleImageVersion, is3DLoadFailed, prefer2DModel) {
-        if (h5Key != null && !hasCustomImage && !prefer2DModel && !is3DRendered) {
+    // 1. 资产就绪自动监听：平稳监听后台 3D 模型下载与解压进度，一旦本地就绪立刻激活 3D 渲染，绝不盲目超时
+    androidx.compose.runtime.LaunchedEffect(h5Key, srcKey, vehicleImageVersion) {
+        if (h5Key != null && !is3DReady) {
+            while (!is3DReady) {
+                if (CarModel3DManager.isModelReady(context, h5Key, srcKey)) {
+                    is3DReady = true
+                    break
+                }
+                kotlinx.coroutines.delay(400)
+            }
+        }
+    }
+
+    // 2. 独立 WebGL 渲染超时倒计时：仅在本地三维资产完全解压就绪、WebView 挂载渲染后才启动计时
+    androidx.compose.runtime.LaunchedEffect(is3DReady, h5Key, is3DLoadFailed, prefer2DModel) {
+        if (is3DReady && h5Key != null && !hasCustomImage && !prefer2DModel && !is3DRendered && !is3DLoadFailed) {
             is3DTimedOut = false
             val completed = kotlinx.coroutines.withTimeoutOrNull(15_000L) {
                 while (!is3DRendered && !is3DLoadFailed) {
-                    kotlinx.coroutines.delay(300)
-                    if (!is3DReady && CarModel3DManager.isModelReady(context, h5Key, srcKey)) {
-                        is3DReady = true
-                    }
+                    kotlinx.coroutines.delay(200)
                 }
                 true
             }
@@ -4164,6 +4382,8 @@ fun VehicleHero(
         }
     }
     val heroColor = MaterialTheme.glassSurface
+    val currentVehicle = availableVehicles.firstOrNull { it.vin == vehicleVin }
+    val officialNickname = currentVehicle?.officialNickname.orEmpty()
     val nickname = vehicleNickname.ifBlank { formatVehicleModel(vehicleModel) }
     val normalizedSoc = VehicleHomeStatus.resolvedSoc(status?.preciseSoc, status?.soc)
     val rangeColor = when (VehicleHomeStatus.socBand(normalizedSoc)) {
@@ -4193,13 +4413,41 @@ fun VehicleHero(
     val pageBg = MaterialTheme.colorScheme.background
     val heroCardShape = RoundedCornerShape(16.dp)
     val isHeroDark = ThemeManager.isHeroBackgroundDark(selectedThemeId, isDark)
-    val heroPrimaryTextColor = if (isHeroDark) Color.White else MaterialTheme.colorScheme.onSurface
-    val heroSecondaryTextColor = if (isHeroDark) Color.White.copy(alpha = 0.90f) else MaterialTheme.colorScheme.onSurfaceVariant
+    val heroPrimaryTextColor = if (isHeroDark) Color.White else Color(0xFF141923)
+    val heroSecondaryTextColor = if (isHeroDark) Color.White.copy(alpha = 0.90f) else Color(0xFF4A5568)
 
-    val themeBgBitmap = remember(selectedThemeId, vehicleImageVersion) {
-        ThemeManager.load3dBgBitmap(context, selectedThemeId)
+    var activeThemeBgBitmap by remember(selectedThemeId, vehicleImageVersion) {
+        val bmp = ThemeManager.load3dBgBitmap(context, selectedThemeId)
+        android.util.Log.i("ThemeDebug", "HomeContent remember: themeId=$selectedThemeId, version=$vehicleImageVersion, bmp=${bmp != null}")
+        mutableStateOf(bmp)
     }
-    val hasThemeBg = themeBgBitmap != null && selectedThemeId != ThemeManager.ORIGINAL_SKYBOX_THEME_ID
+
+    // 默认主题/自选主题自愈检测：若本地高清背景尚未就绪，异步静默下载并即时上屏
+    androidx.compose.runtime.LaunchedEffect(selectedThemeId, vehicleVin) {
+        android.util.Log.i("ThemeDebug", "HomeContent LaunchedEffect: themeId=$selectedThemeId, vin=$vehicleVin, activeBmp=${activeThemeBgBitmap != null}")
+        if (selectedThemeId != ThemeManager.ORIGINAL_SKYBOX_THEME_ID && activeThemeBgBitmap == null) {
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                val themeObj = ThemeManager.loadCachedThemeList(context).find { it.themeId == selectedThemeId }
+                    ?: ThemeManager.PRESET_THEMES.find { it.themeId == selectedThemeId }
+                if (themeObj != null) {
+                    val store = SessionStore(context)
+                    val api = runCatching { LeapmotorApi(store.load()) }.getOrNull()
+                    val ok = ThemeManager.syncThemePackage(context, api, themeObj)
+                    android.util.Log.i("ThemeDebug", "HomeContent LaunchedEffect sync result=$ok")
+                    if (ok) {
+                        val downloaded = ThemeManager.load3dBgBitmap(context, selectedThemeId)
+                        android.util.Log.i("ThemeDebug", "HomeContent LaunchedEffect downloaded=${downloaded != null}")
+                        if (downloaded != null) {
+                            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                activeThemeBgBitmap = downloaded
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    val hasThemeBg = activeThemeBgBitmap != null && selectedThemeId != ThemeManager.ORIGINAL_SKYBOX_THEME_ID
     val isImmersive = show3D || hasThemeBg
 
     Surface(
@@ -4216,19 +4464,12 @@ fun VehicleHero(
             if (hasThemeBg) {
                 // 0. 定制主题实景展台大图 (选用定制主题时，作为首卡沉浸式底衬，2D 与 3D 均可享受实景巨幕)
                 Image(
-                    bitmap = themeBgBitmap!!.asImageBitmap(),
+                    bitmap = activeThemeBgBitmap!!.asImageBitmap(),
                     contentDescription = "主题展台背景",
                     contentScale = ContentScale.Crop,
+                    filterQuality = FilterQuality.High,
                     modifier = Modifier.matchParentSize()
                 )
-                // 夜巡沉浸微暗滤镜：在深色模式下，为高亮浅色主题（晴空广场、雾川雪镜、余晖石筑）轻柔叠加 12% 氛围暗光，平抑强光刺眼，舒适柔和
-                if (ThemeManager.shouldApplyNightMoodFilter(selectedThemeId, isDark)) {
-                    Box(
-                        modifier = Modifier
-                            .matchParentSize()
-                            .background(Color.Black.copy(alpha = 0.12f))
-                    )
-                }
             } else if (!show3D) {
                 // 默认主题且无定制背景下的 2D 模式：绘制微晶磨砂渐变基底 + 能量环境极光 + 展台漫反射
                 androidx.compose.foundation.Canvas(modifier = Modifier.matchParentSize()) {
@@ -4304,19 +4545,6 @@ fun VehicleHero(
                     themeId = selectedThemeId,
                     modifier = Modifier
                         .matchParentSize()
-                        .layout { measurable, constraints ->
-                            val extraPx = 125.dp.roundToPx()
-                            val offsetPx = 74.dp.roundToPx()
-                            val placeable = measurable.measure(
-                                constraints.copy(
-                                    minHeight = (constraints.maxHeight + extraPx).coerceAtLeast(0),
-                                    maxHeight = (constraints.maxHeight + extraPx).coerceAtLeast(0)
-                                )
-                            )
-                            layout(constraints.maxWidth, constraints.maxHeight) {
-                                placeable.placeRelative(0, -offsetPx)
-                            }
-                        }
                         .graphicsLayer { alpha = modelAlpha },
                     onReady = {
                         is3DRendered = true
@@ -4331,19 +4559,18 @@ fun VehicleHero(
             }
 
             if (isImmersive) {
-                // 2. 顶部微晶 HUD 渐变保护层（确保天幕上方的数据文字字字清晰锐利）
-                val hudTopAlpha = if (isHeroDark) 0.52f else 0.88f
-                val hudMidAlpha = if (isHeroDark) 0.24f else 0.52f
+                // 2. 顶部微晶 HUD 渐变保护层（兼顾数据文字锐利度与背景实景画卷通透感）
+                val hudTopAlpha = if (isDark) 0.38f else 0.52f
+                val hudMidAlpha = if (isDark) 0.14f else 0.22f
                 val hudGradientColor = if (!isDark && isHeroDark) Color(0xFF131722) else pageBg
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(185.dp)
+                        .height(96.dp)
                         .background(
                             Brush.verticalGradient(
-                                0.0f to pageBg.copy(alpha = if (isDark) hudTopAlpha else 0.75f),
-                                0.45f to hudGradientColor.copy(alpha = if (isDark) hudMidAlpha else 0.40f),
-                                0.78f to hudGradientColor.copy(alpha = if (isDark) 0.18f else 0.12f),
+                                0.0f to pageBg.copy(alpha = if (isDark) hudTopAlpha else 0.52f),
+                                0.55f to hudGradientColor.copy(alpha = hudMidAlpha),
                                 1.0f to Color.Transparent
                             )
                         )
@@ -4405,6 +4632,14 @@ fun VehicleHero(
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
+                            if (VehicleHomeStatus.shouldShowNicknameEditIcon(nickname, officialNickname, vehicleModel)) {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_edit),
+                                    contentDescription = "修改昵称",
+                                    modifier = Modifier.size(13.dp),
+                                    tint = heroSecondaryTextColor.copy(alpha = 0.75f)
+                                )
+                            }
                         }
                         if (availableVehicles.size > 1) {
                             Box(
@@ -4728,9 +4963,9 @@ fun VehicleHero(
                     val displayAddress = if (address != null && address.length > 10) "${address.take(10)}..." else address
 
                     // 1. 位置信息胶囊 (在上面)
-                    val defaultPillBg = if (isDark) Color(0xFF131722).copy(alpha = 0.68f) else Color.White.copy(alpha = 0.85f)
-                    val pillBorderStroke = BorderStroke(0.5.dp, if (isDark) Color.White.copy(alpha = 0.18f) else Color.Black.copy(alpha = 0.08f))
-                    val pillContentColor = if (isDark) Color.White else MaterialTheme.colorScheme.onSurface
+                    val defaultPillBg = if (isHeroDark) Color(0xFF131722).copy(alpha = 0.68f) else Color.White.copy(alpha = 0.90f)
+                    val pillBorderStroke = BorderStroke(0.5.dp, if (isHeroDark) Color.White.copy(alpha = 0.22f) else Color.Black.copy(alpha = 0.12f))
+                    val pillContentColor = if (isHeroDark) Color.White else Color(0xFF141923)
 
                     if (displayAddress != null) {
                         Spacer(Modifier.height(2.dp))
@@ -4896,7 +5131,7 @@ fun VehicleHero(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(175.dp),
+                        .height(205.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     if (remoteBitmap != null && !is3DRendered && !hasCustomImage && !prefer2DModel) {
@@ -4962,7 +5197,8 @@ fun VehicleHero(
                     onControl = onControl,
                     activeControlCommand = activeControlCommand,
                     embedded = true,
-                    onOpenHealthCheck = onOpenHealthCheck
+                    onOpenHealthCheck = onOpenHealthCheck,
+                    isHeroDark = isHeroDark
                 )
             }
             Spacer(Modifier.height(2.dp))
@@ -6104,7 +6340,8 @@ private fun QuickVehicleActions(
     activeControlCommand: String? = null,
     seamless: Boolean = false,
     embedded: Boolean = false,
-    onOpenHealthCheck: () -> Unit = {}
+    onOpenHealthCheck: () -> Unit = {},
+    isHeroDark: Boolean = false
 ) {
     val context = LocalContext.current
     val sessionStore = remember(context) { SessionStore(context) }
@@ -6259,6 +6496,9 @@ private fun QuickVehicleActions(
     }
 
     val actionsContent = @Composable {
+        val normalActionContentColor = if (isHeroDark) Color.White else Color(0xFF141923)
+        val normalActionLabelColor = if (isHeroDark) Color.White.copy(alpha = 0.92f) else Color(0xFF141923)
+
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -6288,6 +6528,9 @@ private fun QuickVehicleActions(
                                 iconRes = R.drawable.ic_edit,
                                 inProgress = false,
                                 isSensitive = false,
+                                isHeroDark = isHeroDark,
+                                iconTint = normalActionContentColor,
+                                labelTint = normalActionLabelColor,
                                 onClick = { handleQuickActionClick { if (!editing) openEditor() } },
                                 modifier = Modifier.weight(1f)
                             )
@@ -6321,8 +6564,9 @@ private fun QuickVehicleActions(
                                             }
                                         }
                                     },
-                                    iconTint = if (windowOpen) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
-                                    labelTint = if (windowOpen) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+                                    iconTint = if (windowOpen) MaterialTheme.colorScheme.error else normalActionContentColor,
+                                    labelTint = if (windowOpen) MaterialTheme.colorScheme.error else normalActionLabelColor,
+                                    isHeroDark = isHeroDark,
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .onGloballyPositioned { coordinates ->
@@ -6354,8 +6598,9 @@ private fun QuickVehicleActions(
                                             }
                                         }
                                     },
-                                    iconTint = if (sunroofOpen) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
-                                    labelTint = if (sunroofOpen) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+                                    iconTint = if (sunroofOpen) MaterialTheme.colorScheme.error else normalActionContentColor,
+                                    labelTint = if (sunroofOpen) MaterialTheme.colorScheme.error else normalActionLabelColor,
+                                    isHeroDark = isHeroDark,
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .onGloballyPositioned { coordinates ->
@@ -6374,6 +6619,9 @@ private fun QuickVehicleActions(
                                 iconRes = command.iconRes,
                                 inProgress = cmdInProgress,
                                 isSensitive = false,
+                                isHeroDark = isHeroDark,
+                                iconTint = normalActionContentColor,
+                                labelTint = normalActionLabelColor,
                                 onClick = {
                                     handleQuickActionClick {
                                         if (!editing) {
@@ -6418,8 +6666,9 @@ private fun QuickVehicleActions(
                                             }
                                         }
                                     },
-                                    iconTint = if (trunkOpen) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
-                                    labelTint = if (trunkOpen) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+                                    iconTint = if (trunkOpen) MaterialTheme.colorScheme.error else normalActionContentColor,
+                                    labelTint = if (trunkOpen) MaterialTheme.colorScheme.error else normalActionLabelColor,
+                                    isHeroDark = isHeroDark,
                                     modifier = Modifier.fillMaxWidth()
                                 )
                                 if (trunkOpen) {
@@ -6439,6 +6688,7 @@ private fun QuickVehicleActions(
                                 warning = isWarningCmd,
                                 inProgress = cmdInProgress,
                                 isSensitive = isFrunkOpen,
+                                isHeroDark = isHeroDark,
                                 onClick = {
                                     handleQuickActionClick {
                                         if (!editing) {
@@ -6457,6 +6707,8 @@ private fun QuickVehicleActions(
                                 onLongPressConfirm = if (isFrunkOpen) {
                                     { handleQuickActionClick { if (!editing) onControl("frunkOpen") } }
                                 } else null,
+                                iconTint = if (isWarningCmd) MaterialTheme.colorScheme.error else normalActionContentColor,
+                                labelTint = if (isWarningCmd) MaterialTheme.colorScheme.error else normalActionLabelColor,
                                 modifier = Modifier.weight(1f)
                             )
                         }
@@ -6791,8 +7043,9 @@ private fun QuickVehicleButton(
     modifier: Modifier,
     onLongClick: (() -> Unit)? = null,
     onLongPressConfirm: (() -> Unit)? = null,
-    iconTint: Color = if (warning) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
-    labelTint: Color = if (warning) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
+    isHeroDark: Boolean = false,
+    iconTint: Color = if (warning) MaterialTheme.colorScheme.error else (if (isHeroDark) Color.White else Color(0xFF141923)),
+    labelTint: Color = if (warning) MaterialTheme.colorScheme.error else (if (isHeroDark) Color.White.copy(alpha = 0.92f) else Color(0xFF141923))
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
@@ -6827,15 +7080,15 @@ private fun QuickVehicleButton(
         inProgress -> MaterialTheme.colorScheme.primary.copy(alpha = 0.16f * pulseAlpha)
         isWarning -> MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.35f)
         isPressed || isHolding -> MaterialTheme.glassInsetSurface.copy(alpha = 0.92f)
-        else -> if (isDark) Color(0xFF262E3D).copy(alpha = 0.68f) else Color.White.copy(alpha = 0.76f)
+        else -> if (isHeroDark) Color(0xFF262E3D).copy(alpha = 0.68f) else Color.White.copy(alpha = 0.88f)
     }
     val circleBorder = when {
         inProgress -> BorderStroke(1.2.dp, MaterialTheme.colorScheme.primary.copy(alpha = pulseAlpha))
         isWarning -> BorderStroke(0.8.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.85f))
         else -> BorderStroke(
             0.8.dp,
-            if (isDark) Color.White.copy(alpha = if (isPressed || isHolding) 0.35f else 0.18f)
-            else Color.White.copy(alpha = if (isPressed || isHolding) 0.95f else 0.82f)
+            if (isHeroDark) Color.White.copy(alpha = if (isPressed || isHolding) 0.35f else 0.18f)
+            else Color.White.copy(alpha = if (isPressed || isHolding) 0.95f else 0.85f)
         )
     }
 
@@ -6963,9 +7216,17 @@ private fun QuickVehicleButton(
         }
         Text(
             label,
-            style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.5.sp, lineHeight = 15.sp),
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontSize = 11.5.sp,
+                lineHeight = 15.sp,
+                shadow = androidx.compose.ui.graphics.Shadow(
+                    color = if (isHeroDark) Color.Black.copy(alpha = 0.45f) else Color.White.copy(alpha = 0.85f),
+                    offset = Offset(0f, 1f),
+                    blurRadius = 3f
+                )
+            ),
             color = if (inProgress) MaterialTheme.colorScheme.primary else labelTint,
-            fontWeight = if (isWarning || inProgress) FontWeight.Bold else FontWeight.Medium,
+            fontWeight = if (isWarning || inProgress) FontWeight.Bold else FontWeight.SemiBold,
             maxLines = 1,
             softWrap = false
         )

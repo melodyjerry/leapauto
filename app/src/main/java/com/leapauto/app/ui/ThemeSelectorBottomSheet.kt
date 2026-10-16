@@ -76,6 +76,18 @@ fun ThemeSelectorBottomSheet(
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
             ThemeManager.cleanInvalidBlurredCache(context)
+            if (currentThemeId != ThemeManager.ORIGINAL_SKYBOX_THEME_ID && !ThemeManager.isThemeReady(context, currentThemeId)) {
+                val currentObj = themes.find { it.themeId == currentThemeId }
+                    ?: ThemeManager.PRESET_THEMES.find { it.themeId == currentThemeId }
+                if (currentObj != null) {
+                    val ok = ThemeManager.syncThemePackage(context, api, currentObj)
+                    if (ok) {
+                        withContext(Dispatchers.Main) {
+                            onThemeApplied(currentThemeId)
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -101,7 +113,7 @@ fun ThemeSelectorBottomSheet(
             ) {
                 Column {
                     Text(
-                        text = "3D 展台与小组件主题",
+                        text = "主题中心",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
@@ -150,8 +162,8 @@ fun ThemeSelectorBottomSheet(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(14.dp))
-                            .clickable(enabled = !isBusy && !isSelected) {
-                                if (isSelected || isBusy) return@clickable
+                            .clickable(enabled = !isBusy && (!isSelected || !isReady)) {
+                                if (isBusy || (isSelected && isReady)) return@clickable
                                 if (isReady || theme.themeId == ThemeManager.ORIGINAL_SKYBOX_THEME_ID) {
                                     applyingThemeId = theme.themeId
                                     coroutineScope.launch {
@@ -332,7 +344,7 @@ fun ThemeSelectorBottomSheet(
                                         }
                                     }
                                 }
-                                isSelected -> {
+                                isSelected && isReady -> {
                                     Box(
                                         modifier = Modifier
                                             .size(24.dp)
@@ -354,7 +366,7 @@ fun ThemeSelectorBottomSheet(
                                         border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.40f))
                                     ) {
                                         Text(
-                                            text = "下载并应用",
+                                            text = if (isSelected) "下载并生效" else "下载并应用",
                                             style = MaterialTheme.typography.labelSmall,
                                             fontWeight = FontWeight.SemiBold,
                                             color = MaterialTheme.colorScheme.primary,
