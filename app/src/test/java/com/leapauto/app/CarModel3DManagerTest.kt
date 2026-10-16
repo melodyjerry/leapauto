@@ -208,7 +208,7 @@ class CarModel3DManagerTest {
 
         assertTrue(viewSource.contains("targetZoom = 1.12"))
         assertTrue(viewSource.contains("cam.updateProjectionMatrix()"))
-        assertTrue(viewSource.contains("cam.position.set(-10.8, 3.0, 10.8)"))
+        assertTrue(viewSource.contains("cam.position.set(-11.15, 3.13, 10.45)"))
         assertTrue(viewSource.contains("ctrl.target.copy(target)"))
         assertTrue(viewSource.contains("v.renderer.setClearColor(0x000000, 0)"))
         assertTrue(viewSource.contains("v.renderer.setClearAlpha(0)"))
@@ -621,5 +621,18 @@ class CarModel3DManagerTest {
         assertTrue(screenSource.contains("isHeroDark: Boolean = false"))
         assertTrue(screenSource.contains("normalActionContentColor = if (isHeroDark) Color.White else Color(0xFF141923)"))
         assertTrue(screenSource.contains("blurRadius = 3f"))
+    }
+
+    @Test
+    fun `3d camera target and position ensure horizontal centering and vertical grounding`() {
+        val workingDirectory = requireNotNull(System.getProperty("user.dir"))
+        val projectDir = generateSequence(File(workingDirectory)) { it.parentFile }
+            .first { File(it, "app").isDirectory }
+        val viewSource = File(projectDir, "app/src/main/java/com/leapauto/app/ui/CarModel3DView.kt").readText()
+        val screenSource = File(projectDir, "app/src/main/java/com/leapauto/app/ui/LeapAutoScreen.kt").readText()
+
+        assertTrue(viewSource.contains("var target = new THREE.Vector3(-0.35, 0.98, -0.35);"))
+        assertTrue(viewSource.contains("cam.position.set(-11.15, 3.13, 10.45);"))
+        assertTrue(screenSource.contains(".height(172.dp)"))
     }
 }

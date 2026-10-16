@@ -125,7 +125,7 @@ class CompactControlWidget : AppWidgetProvider() {
                 null
             }
             if (remoteBitmap != null) {
-                val scaledBitmap = ControlWidget.scaleBitmapForWidget(remoteBitmap, 320)
+                val scaledBitmap = ControlWidget.scaleBitmapForWidget(remoteBitmap, 520, 0.94f)
                 views.setImageViewBitmap(R.id.imgWCCar, scaledBitmap)
                 views.setViewVisibility(R.id.imgWCCar, View.VISIBLE)
             } else {

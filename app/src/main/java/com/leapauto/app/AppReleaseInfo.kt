@@ -5,5 +5,5 @@ object AppReleaseInfo {
         get() = BuildConfig.VERSION_NAME
 
     // Update this text together with apkVersionName before each delivery package.
-    const val currentReleaseNotes = "1. 修复「层峦叠嶂」原厂 3D 主题顶部状态栏大黑边，恢复全景天幕沉浸式铺满\n2. 优化 3D 摄像机垂直目标点，保持纯三维视角下车模平稳居中舒展姿态"
+    const val currentReleaseNotes = "1. 升级 4x2 与 2x2 桌面小组件车模高清渲染，大幅提升分辨率与细节精致度\n2. 注入双线性滤波抗锯齿与色彩抖动平滑渲染，车身比例舒展饱满"
 }

@@ -201,13 +201,14 @@ class CompactWidgetSpecTest {
     }
 
     @Test
-    fun `widget car bitmap scaling enlarges car by one fourth with 0_84f scale ratio`() {
+    fun `widget car bitmap scaling enlarges car with 0_94f scale ratio and high definition filter`() {
         val projectDir = projectDirectory()
         val controlWidget = File(projectDir, "app/src/main/java/com/leapauto/app/ControlWidget.kt").readText()
 
-        assertTrue(controlWidget.contains("scaleRatio: Float = 0.84f"))
+        assertTrue(controlWidget.contains("scaleRatio: Float = 0.94f"))
+        assertTrue(controlWidget.contains("targetWidth: Int = 680"))
         assertTrue(controlWidget.contains("val carW = (canvasW * scaleRatio).toInt()"))
-        assertTrue(controlWidget.contains("canvas.drawBitmap(scaledCar, left, top, null)"))
+        assertTrue(controlWidget.contains("canvas.drawBitmap(scaledCar, left, top, paint)"))
     }
 
     @Test

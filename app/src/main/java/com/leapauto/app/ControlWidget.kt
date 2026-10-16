@@ -798,8 +798,8 @@ class ControlWidget : AppWidgetProvider() {
 
         internal fun scaleBitmapForWidget(
             bitmap: android.graphics.Bitmap,
-            targetWidth: Int = 400,
-            scaleRatio: Float = 0.84f
+            targetWidth: Int = 680,
+            scaleRatio: Float = 0.94f
         ): android.graphics.Bitmap {
             val canvasW = targetWidth
             val canvasH = (bitmap.height * (targetWidth.toFloat() / bitmap.width)).toInt().coerceAtLeast(1)
@@ -810,9 +810,12 @@ class ControlWidget : AppWidgetProvider() {
             val scaledCar = android.graphics.Bitmap.createScaledBitmap(bitmap, carW, carH, true)
             val outBitmap = android.graphics.Bitmap.createBitmap(canvasW, canvasH, android.graphics.Bitmap.Config.ARGB_8888)
             val canvas = android.graphics.Canvas(outBitmap)
+            val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG or android.graphics.Paint.FILTER_BITMAP_FLAG).apply {
+                isDither = true
+            }
             val left = (canvasW - carW) / 2f
             val top = (canvasH - carH) / 2f
-            canvas.drawBitmap(scaledCar, left, top, null)
+            canvas.drawBitmap(scaledCar, left, top, paint)
             if (scaledCar != bitmap) {
                 scaledCar.recycle()
             }
@@ -831,7 +834,7 @@ class ControlWidget : AppWidgetProvider() {
                 null
             }
             if (remoteBitmap != null) {
-                val scaledBitmap = scaleBitmapForWidget(remoteBitmap, 400)
+                val scaledBitmap = scaleBitmapForWidget(remoteBitmap, 680, 0.94f)
                 views.setImageViewBitmap(R.id.imgWCar, scaledBitmap)
                 views.setViewVisibility(R.id.imgWCar, View.VISIBLE)
             } else {

@@ -45,4 +45,20 @@ class WidgetVehicleAppearanceTest {
         assertEquals("C16", appearance.model)
         assertEquals("liquid_silver", appearance.color.id)
     }
+
+    @Test
+    fun `widget vehicle image scaling uses retina resolution and smooth filtering`() {
+        val workingDirectory = requireNotNull(System.getProperty("user.dir"))
+        val projectDir = generateSequence(java.io.File(workingDirectory)) { it.parentFile }
+            .first { java.io.File(it, "app").isDirectory }
+        val widgetSource = java.io.File(projectDir, "app/src/main/java/com/leapauto/app/ControlWidget.kt").readText()
+        val compactSource = java.io.File(projectDir, "app/src/main/java/com/leapauto/app/CompactControlWidget.kt").readText()
+
+        org.junit.Assert.assertTrue(widgetSource.contains("targetWidth: Int = 680"))
+        org.junit.Assert.assertTrue(widgetSource.contains("scaleRatio: Float = 0.94f"))
+        org.junit.Assert.assertTrue(widgetSource.contains("FILTER_BITMAP_FLAG"))
+        org.junit.Assert.assertTrue(widgetSource.contains("isDither = true"))
+        org.junit.Assert.assertTrue(widgetSource.contains("scaleBitmapForWidget(remoteBitmap, 680, 0.94f)"))
+        org.junit.Assert.assertTrue(compactSource.contains("scaleBitmapForWidget(remoteBitmap, 520, 0.94f)"))
+    }
 }

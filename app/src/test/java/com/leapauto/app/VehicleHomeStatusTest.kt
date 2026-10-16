@@ -355,6 +355,17 @@ class VehicleHomeStatusTest {
         assertTrue(screenSource.contains("R.drawable.ic_edit"))
     }
 
+    @Test
+    fun `vehicle status card displays total mileage without today mileage pager`() {
+        val projectDir = projectDirectory()
+        val screenSource = java.io.File(projectDir, "app/src/main/java/com/leapauto/app/ui/LeapAutoScreen.kt")
+            .readText()
+            .replace("\r\n", "\n")
+        assertTrue(screenSource.contains("VehicleStatusCell(\n                    \"总里程\","))
+        assertFalse(screenSource.contains("\"今日里程\""))
+        assertTrue(screenSource.contains("?: \"未充电\""))
+    }
+
     private fun projectDirectory(): java.io.File {
         val workingDirectory = requireNotNull(System.getProperty("user.dir"))
         return generateSequence(java.io.File(workingDirectory)) { it.parentFile }

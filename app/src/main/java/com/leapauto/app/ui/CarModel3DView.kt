@@ -962,17 +962,17 @@ internal class CarModelWebView(
                     window.car.__viewAnimSet__.clear();
                 }
 
-                // 目标点瞄准车身中心高度 y = 0.85，纯三维视角促使车模成像重心平稳下移沉降
-                var target = new THREE.Vector3(0, 0.85, 0);
+                // 目标点瞄准车身中心偏右后 (x = -0.35, y = 0.98, z = -0.35)，实现横向视觉完美居中与垂直黄金沉降
+                var target = new THREE.Vector3(-0.35, 0.98, -0.35);
                 ctrl.target.copy(target);
 
-                // 镜头位置：黄金 12 度俯视角且拉近至 15.5m 展车距离 (x = -10.8, y = 3.0, z = 10.8)，放大车身体量
-                cam.position.set(-10.8, 3.0, 10.8);
+                // 镜头位置：黄金 12 度俯视角 (x = -11.15, y = 3.13, z = 10.45)
+                cam.position.set(-11.15, 3.13, 10.45);
                 cam.lookAt(target);
 
                 // 固化控制器坐标与默认视角
                 if (ctrl.target0) ctrl.target0.copy(target);
-                if (ctrl.position0) ctrl.position0.set(-10.8, 3.0, 10.8);
+                if (ctrl.position0) ctrl.position0.set(-11.15, 3.13, 10.45);
                 if (typeof ctrl.saveState === 'function') ctrl.saveState();
                 if (typeof ctrl.update === 'function') ctrl.update();
 

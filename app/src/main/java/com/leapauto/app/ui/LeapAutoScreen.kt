@@ -1492,7 +1492,6 @@ private fun HomeContent(
                         )
                         VehicleStatusCard(
                             status = status,
-                            todayMileage = EnergyHomeCardPolicy.todayMileage((energyState as? EnergyAnalyticsState.Success)?.data),
                             onOpenHealthyCharging = onOpenHealthyCharging,
                             onControl = onControl,
                             modifier = Modifier
@@ -5131,7 +5130,7 @@ fun VehicleHero(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(205.dp),
+                        .height(172.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     if (remoteBitmap != null && !is3DRendered && !hasCustomImage && !prefer2DModel) {
@@ -7762,7 +7761,7 @@ fun VehicleStatusCard(
         false -> "车锁未锁"
         null -> "--"
     }
-    val remainTime = status?.chargeRemainTime?.trim().takeUnless { it.isNullOrBlank() } ?: "未充"
+    val remainTime = status?.chargeRemainTime?.trim().takeUnless { it.isNullOrBlank() || it == "--" } ?: "未充电"
     var showWindowDetails by rememberSaveable { mutableStateOf(false) }
     var powerNextPageRequest by rememberSaveable { mutableStateOf<Int?>(null) }
     val windowAlert = windowAvailable && openWindows.isNotEmpty()
@@ -7801,7 +7800,7 @@ fun VehicleStatusCard(
                     .weight(1f),
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                // 左侧里程卡片：支持点击/滑动在「今日里程」与「总里程」之间平滑切换
+                // 左侧里程卡片：仅展示「总里程」
                 val formattedTotalMileage = remember(status?.totalMileage) {
                     val raw = status?.totalMileage?.trim().orEmpty()
                     when {
@@ -7810,96 +7809,13 @@ fun VehicleStatusCard(
                         else -> "${raw}km"
                     }
                 }
-                val mileageItems = listOf(
-                    "今日里程" to todayMileage,
-                    "总里程" to formattedTotalMileage
-                )
-                val mileagePagerState = rememberPagerState { mileageItems.size }
-                var mileageNextPageRequest by rememberSaveable { mutableStateOf<Int?>(null) }
-                LaunchedEffect(mileageNextPageRequest) {
-                    mileageNextPageRequest?.let { page ->
-                        mileagePagerState.animateScrollToPage(page)
-                        mileageNextPageRequest = null
-                    }
-                }
-
-                Surface(
-                    modifier = Modifier
+                VehicleStatusCell(
+                    "总里程",
+                    formattedTotalMileage,
+                    Modifier
                         .weight(1f)
-                        .fillMaxHeight(),
-                    shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.glassInsetSurface,
-                    border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
-                ) {
-                    HorizontalPager(
-                        state = mileagePagerState,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .clickable {
-                                mileageNextPageRequest = (mileagePagerState.currentPage + 1) % mileageItems.size
-                            },
-                        pageSpacing = 8.dp,
-                        beyondViewportPageCount = 1,
-                        userScrollEnabled = true
-                    ) { page ->
-                        val item = mileageItems[page]
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(start = 2.dp, top = 5.5.dp, end = 2.dp, bottom = 9.5.dp),
-                                verticalArrangement = Arrangement.spacedBy(1.5.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
-                                Text(
-                                    text = item.first,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.Normal,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Text(
-                                    text = item.second,
-                                    style = MaterialTheme.typography.labelMedium.copy(
-                                        fontSize = 12.sp,
-                                        letterSpacing = (-0.3).sp
-                                    ),
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    maxLines = 1,
-                                    softWrap = false,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
-
-                            Row(
-                                modifier = Modifier
-                                    .align(Alignment.BottomCenter)
-                                    .padding(bottom = 3.5.dp),
-                                horizontalArrangement = Arrangement.spacedBy(2.5.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                repeat(mileageItems.size) { dotIndex ->
-                                    val isCurrent = mileagePagerState.currentPage == dotIndex
-                                    val indicatorWidth by animateDpAsState(
-                                        targetValue = if (isCurrent) 6.dp else 2.5.dp,
-                                        animationSpec = tween(200),
-                                        label = "mileageIndicatorWidth"
-                                    )
-                                    Box(
-                                        modifier = Modifier
-                                            .size(indicatorWidth, 1.8.dp)
-                                            .clip(RoundedCornerShape(1.dp))
-                                            .background(
-                                                if (isCurrent) MaterialTheme.colorScheme.primary.copy(alpha = 0.70f)
-                                                else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
-                                            )
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
+                        .fillMaxHeight()
+                )
 
                 // 右侧功率卡片：充电功率 / 剩余时间 / 电压 / 电流 / 电池温度
                 val speedValue = status?.speed?.trim()?.removeSuffix("km/h")?.toDoubleOrNull()
