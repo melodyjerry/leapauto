@@ -705,8 +705,47 @@ class SessionStore(context: Context) {
         return true
     }
 
+    fun setOptimisticLock(vin: String, locked: Boolean) {
+        if (vin.isBlank()) return
+        prefs.edit()
+            .putLong(KEY_WIDGET_OPTIMISTIC_LOCK_EPOCH + vin, System.currentTimeMillis())
+            .putBoolean(KEY_WIDGET_OPTIMISTIC_LOCK_STATE + vin, locked)
+            .apply()
+    }
+
+    fun clearOptimisticLock(vin: String) {
+        if (vin.isBlank()) return
+        prefs.edit()
+            .remove(KEY_WIDGET_OPTIMISTIC_LOCK_EPOCH + vin)
+            .remove(KEY_WIDGET_OPTIMISTIC_LOCK_STATE + vin)
+            .apply()
+    }
+
+    /**
+     * Resolves the effective lock state considering the optimistic lock protection window (15s).
+     * If the cloud telemetry already matches the optimistic target, the protection is cleared immediately.
+     */
+    fun resolveEffectiveLock(vin: String, telemetryLocked: Boolean?): Boolean? {
+        if (vin.isBlank()) return telemetryLocked
+        val epoch = prefs.getLong(KEY_WIDGET_OPTIMISTIC_LOCK_EPOCH + vin, 0L)
+        val now = System.currentTimeMillis()
+        val protected = now - epoch in 0..WIDGET_LOCK_PROTECTION_WINDOW_MS
+        if (!protected) {
+            clearOptimisticLock(vin)
+            return telemetryLocked
+        }
+        val optimisticState = prefs.getBoolean(KEY_WIDGET_OPTIMISTIC_LOCK_STATE + vin, false)
+        if (telemetryLocked == optimisticState) {
+            clearOptimisticLock(vin)
+            return telemetryLocked
+        }
+        return optimisticState
+    }
+
     /** Updates only the locally cached lock state after a confirmed lock/unlock command. */
     fun updateWidgetLockState(vin: String, locked: Boolean): Boolean {
+        if (vin.isBlank()) return false
+        setOptimisticLock(vin, locked)
         val snapshot = loadWidgetSnapshot(vin) ?: return false
         saveWidgetSnapshot(
             vin = snapshot.vin,
@@ -1005,6 +1044,9 @@ class SessionStore(context: Context) {
         const val WIDGET_AUTH_INVALID = "widget_auth_invalid"
         const val POWER_PAGER_AUTO_PLAY_ENABLED = "power_pager_auto_play_enabled"
         const val WIDGET_4X2_ACTIONS = "widget_4x2_actions"
+        const val WIDGET_LOCK_PROTECTION_WINDOW_MS = 15_000L
+        const val KEY_WIDGET_OPTIMISTIC_LOCK_EPOCH = "widget_optimistic_lock_epoch_"
+        const val KEY_WIDGET_OPTIMISTIC_LOCK_STATE = "widget_optimistic_lock_state_"
         val SESSION_LOCK = Any()
     }
 }

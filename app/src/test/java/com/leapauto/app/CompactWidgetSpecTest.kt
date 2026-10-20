@@ -177,6 +177,20 @@ class CompactWidgetSpecTest {
     }
 
     @Test
+    fun `widget text shadow is transparent to prevent fuzzy blurred text in both light and dark modes`() {
+        val projectDir = projectDirectory()
+        val lightColors = File(projectDir, "app/src/main/res/values/colors.xml").readText()
+        val darkColors = File(projectDir, "app/src/main/res/values-night/colors.xml").readText()
+
+        listOf(lightColors, darkColors).forEach { colors ->
+            assertTrue(
+                "widget_text_shadow 必须为 #00000000 透明色以消除文字发糊与漫反射黑晕",
+                colors.contains("<color name=\"widget_text_shadow\">#00000000</color>")
+            )
+        }
+    }
+
+    @Test
     fun `compact pure electric and fuel progress bars share the same geometry`() {
         val projectDir = projectDirectory()
         val layout = File(projectDir, "app/src/main/res/layout/widget_compact_layout.xml").readText()

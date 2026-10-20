@@ -148,6 +148,36 @@ class HvacFineControlTest {
         assertFalse(expectation == ClimateTelemetryExpectation())
     }
 
+    @Test
+    fun detailedCommandSelectsHotModeForHeatingTemperatures() {
+        val coldCommand = Commands.buildDetailedAc(detailedCommand(temperatureC = 23))
+        val hotCommand = Commands.buildDetailedAc(detailedCommand(temperatureC = 28))
+
+        val coldState = JSONObject(coldCommand.stateJson)
+        val hotState = JSONObject(hotCommand.stateJson)
+
+        assertEquals("cold", coldState.getString("mode"))
+        assertEquals("hot", hotState.getString("mode"))
+    }
+
+    @Test
+    fun climateDialogStateToneSeparatesVehicleStatusFromEditedTemperature() {
+        val workingDirectory = requireNotNull(System.getProperty("user.dir"))
+        val projectDir = generateSequence(java.io.File(workingDirectory)) { it.parentFile ?: return@generateSequence null }
+            .first { java.io.File(it, "app").isDirectory }
+        val screenSource = java.io.File(projectDir, "app/src/main/java/com/leapauto/app/ui/LeapAutoScreen.kt").readText()
+
+        // 验证弹窗的 climateTone 使用 ClimateTemperatureToneResolver.tone(..., targetTemperature = temperatureTarget.value)
+        assertTrue(
+            "空调弹窗必须使用 ClimateTemperatureToneResolver 并且依赖车端目标温度，绝不被滑动中的 editedTemperature 绑架",
+            screenSource.contains("targetTemperature = temperatureTarget.value")
+        )
+        assertFalse(
+            "空调弹窗严禁使用 editedTemperature < indoorTemp 粗暴盲目篡改工况文字",
+            screenSource.contains("editedTemperature < indoorTemp")
+        )
+    }
+
     private fun detailedCommand(
         operation: HvacOperation = HvacOperation.ON,
         temperatureC: Int = 23,

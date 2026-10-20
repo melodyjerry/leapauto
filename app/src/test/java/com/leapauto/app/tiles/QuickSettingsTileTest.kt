@@ -57,4 +57,21 @@ class QuickSettingsTileTest {
         assertTrue(screenSource.contains("下拉控制中心快捷开关"))
         assertTrue(screenSource.contains("TilePromptHelper.requestAddTile"))
     }
+
+    @Test
+    fun `quick settings tiles protect against concurrent command execution and eliminate premature recovery`() {
+        val projectDir = projectDirectory()
+        val lockTile = File(projectDir, "app/src/main/java/com/leapauto/app/tiles/LockToggleTileService.kt").readText()
+        val hornTile = File(projectDir, "app/src/main/java/com/leapauto/app/tiles/HornTileService.kt").readText()
+        val climateTile = File(projectDir, "app/src/main/java/com/leapauto/app/tiles/ClimateTileService.kt").readText()
+        val controlService = File(projectDir, "app/src/main/java/com/leapauto/app/ControlService.kt").readText()
+
+        assertTrue("ControlService 必须暴露 isCommandInFlight 查询方法", controlService.contains("fun isCommandInFlight(): Boolean = commandInFlight.get()"))
+        assertTrue("车锁磁贴必须拦截指令执行中的二次并发点击", lockTile.contains("if (ControlService.isCommandInFlight())"))
+        assertTrue("寻车磁贴必须拦截指令执行中的二次并发点击", hornTile.contains("if (ControlService.isCommandInFlight())"))
+        assertTrue("空调磁贴必须拦截指令执行中的二次并发点击", climateTile.contains("if (ControlService.isCommandInFlight())"))
+        assertTrue("车锁磁贴兜底超时必须延长至 10 秒以上，杜绝 1.5 秒过早恢复导致后续指令被吞", lockTile.contains("10_000L"))
+        assertTrue("车锁磁贴必须移除旧的 1.5 秒短时恢复定时器", !lockTile.contains("1500L"))
+        assertTrue("车锁磁贴必须使用 isCarLocked 区分本地门锁状态与手机锁屏 isLockedState", lockTile.contains("isCarLocked"))
+    }
 }

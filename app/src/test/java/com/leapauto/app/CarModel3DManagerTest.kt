@@ -372,6 +372,17 @@ class CarModel3DManagerTest {
     }
 
     @Test
+    fun `leap auto screen vehicle condition and tire pressure cards use 120dp height for balanced bottom padding`() {
+        val workingDirectory = requireNotNull(System.getProperty("user.dir"))
+        val projectDir = generateSequence(File(workingDirectory)) { it.parentFile }
+            .first { File(it, "app").isDirectory }
+        val screenSource = File(projectDir, "app/src/main/java/com/leapauto/app/ui/LeapAutoScreen.kt").readText().replace("\r\n", "\n")
+
+        assertTrue("胎压卡片高度必须提升至 120.dp", screenSource.contains("HomeTirePressureCard(\n                            status = status,\n                            modifier = Modifier\n                                .weight(1f)\n                                .height(120.dp)"))
+        assertTrue("车况状态卡片高度必须提升至 120.dp", screenSource.contains("VehicleStatusCard(\n                            status = status,\n                            onOpenHealthyCharging = onOpenHealthyCharging,\n                            onControl = onControl,\n                            modifier = Modifier\n                                .weight(1f)\n                                .height(120.dp)"))
+    }
+
+    @Test
     fun `leap auto screen vehicle hero uses balanced compact stage`() {
         val workingDirectory = requireNotNull(System.getProperty("user.dir"))
         val projectDir = generateSequence(File(workingDirectory)) { it.parentFile }
@@ -400,11 +411,50 @@ class CarModel3DManagerTest {
             .first { File(it, "app").isDirectory }
         val screenSource = File(projectDir, "app/src/main/java/com/leapauto/app/ui/LeapAutoScreen.kt").readText()
 
-        assertTrue(screenSource.contains("mileageDisplayColor = heroPrimaryTextColor"))
+        assertTrue(screenSource.contains("if (isYuhuiStoneTheme) Color.White else heroPrimaryTextColor"))
         assertTrue(screenSource.contains("electricGradientColors"))
         assertTrue(screenSource.contains("fuelGradientColors"))
         assertTrue(screenSource.contains("Color(0xFF0066FF), Color(0xFF00E676)"))
         assertTrue(screenSource.contains("slotBaseColor = if (isDark) Color.White.copy(alpha = 0.12f)"))
+    }
+
+    @Test
+    fun `leap auto screen driving status capsule uses high contrast frosted pill base with aurora green breathing dot`() {
+        val workingDirectory = requireNotNull(System.getProperty("user.dir"))
+        val projectDir = generateSequence(File(workingDirectory)) { it.parentFile }
+            .first { File(it, "app").isDirectory }
+        val screenSource = File(projectDir, "app/src/main/java/com/leapauto/app/ui/LeapAutoScreen.kt").readText().replace("\r\n", "\n")
+
+        assertTrue("行车胶囊底座必须使用与地址胶囊一致的高对比微晶实底 defaultPillBg，杜绝半透明水蓝底被浅色背景吞没", screenSource.contains("color = defaultPillBg"))
+        assertTrue("行车胶囊文字必须使用高对比度科技字色 pillContentColor", screenSource.contains("contentColor = pillContentColor"))
+        assertTrue("行车胶囊文字必须加粗为 SemiBold 保证强光和雪景下极致清晰", screenSource.contains("fontWeight = FontWeight.SemiBold,\n                                color = pillContentColor"))
+        assertTrue("行车状态下呼吸指示灯必须采用极光薄荷青 Color(0xFF00E676)", screenSource.contains("DrivingBreathingDot(color = Color(0xFF00E676))"))
+        assertTrue("行车胶囊边框采用极光高光切边 movingPillBorder", screenSource.contains("border = if (isMoving) movingPillBorder else pillBorderStroke"))
+    }
+
+    @Test
+    fun `leap auto screen top hero capsules follow unified frosted pill base and geometry`() {
+        val workingDirectory = requireNotNull(System.getProperty("user.dir"))
+        val projectDir = generateSequence(File(workingDirectory)) { it.parentFile }
+            .first { File(it, "app").isDirectory }
+        val screenSource = File(projectDir, "app/src/main/java/com/leapauto/app/ui/LeapAutoScreen.kt").readText().replace("\r\n", "\n")
+
+        assertTrue("充电中心胶囊必须统一使用 defaultPillBg 底座材质", screenSource.contains("val backgroundColor = defaultPillBg"))
+        assertTrue("充电中心胶囊内边距必须统一为 7dp, 1.5dp", screenSource.contains("modifier = Modifier.padding(horizontal = 7.dp, vertical = 1.5.dp)"))
+        assertTrue("哨兵胶囊必须统一使用 50% 药丸圆角与 defaultPillBg", screenSource.contains("status?.sentryMode == true) {\n                            Surface(\n                                shape = RoundedCornerShape(percent = 50),\n                                color = defaultPillBg"))
+        assertTrue("地址胶囊内边距必须统一为 7dp, 1.5dp", screenSource.contains("displayAddress != null) {\n                        Spacer(Modifier.height(2.dp))\n                        Surface(\n                            modifier = Modifier\n                                .clip(RoundedCornerShape(percent = 50))\n                                .clickable(onClick = onParkingClick),\n                            shape = RoundedCornerShape(percent = 50),\n                            color = defaultPillBg,\n                            contentColor = pillContentColor,\n                            border = pillBorderStroke,\n                            shadowElevation = 0.dp\n                        ) {\n                            Row(\n                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 1.5.dp)"))
+    }
+
+    @Test
+    fun `yuhui stone theme mileage number and unit force high contrast white`() {
+        val workingDirectory = requireNotNull(System.getProperty("user.dir"))
+        val projectDir = generateSequence(File(workingDirectory)) { it.parentFile }
+            .first { File(it, "app").isDirectory }
+        val screenSource = File(projectDir, "app/src/main/java/com/leapauto/app/ui/LeapAutoScreen.kt").readText()
+
+        assertTrue(screenSource.contains("val isYuhuiStoneTheme = selectedThemeId == \"5\""))
+        assertTrue(screenSource.contains("val mileageDisplayColor = if (isYuhuiStoneTheme) Color.White else heroPrimaryTextColor"))
+        assertTrue(screenSource.contains("val unitDisplayColor = if (isYuhuiStoneTheme) Color.White.copy(alpha = 0.90f) else heroSecondaryTextColor"))
     }
 
     @Test
@@ -446,7 +496,7 @@ class CarModel3DManagerTest {
     }
 
     @Test
-    fun `charging center pill uses tight vertical padding and sentry rejects sub account`() {
+    fun `charging center pill uses unified compact padding and sentry rejects sub account`() {
         val workingDirectory = requireNotNull(System.getProperty("user.dir"))
         val projectDir = generateSequence(File(workingDirectory)) { it.parentFile }
             .first { File(it, "app").isDirectory }
@@ -454,19 +504,19 @@ class CarModel3DManagerTest {
         val mainSource = File(projectDir, "app/src/main/java/com/leapauto/app/MainActivity.kt").readText()
         val modelsSource = File(projectDir, "app/src/main/java/com/leapauto/app/Models.kt").readText()
 
-        assertTrue(screenSource.contains("padding(horizontal = 6.dp, vertical = 0.5.dp)"))
+        assertTrue(screenSource.contains("padding(horizontal = 7.dp, vertical = 1.5.dp)"))
         assertTrue(mainSource.contains("SUB_ACCOUNT_UNSUPPORTED_MESSAGE"))
         assertTrue(modelsSource.contains("SUB_ACCOUNT_UNSUPPORTED_MESSAGE"))
     }
 
     @Test
-    fun `location pill and parking pill use tight vertical padding and line height to hug text`() {
+    fun `location pill and parking pill use unified vertical padding and line height to hug text`() {
         val workingDirectory = requireNotNull(System.getProperty("user.dir"))
         val projectDir = generateSequence(File(workingDirectory)) { it.parentFile }
             .first { File(it, "app").isDirectory }
         val screenSource = File(projectDir, "app/src/main/java/com/leapauto/app/ui/LeapAutoScreen.kt").readText()
 
-        assertTrue(screenSource.contains("padding(horizontal = 6.dp, vertical = 1.dp)"))
+        assertTrue(screenSource.contains("padding(horizontal = 7.dp, vertical = 1.5.dp)"))
         assertTrue(screenSource.contains("style = MaterialTheme.typography.labelSmall.copy(lineHeight = 11.sp)"))
     }
 
@@ -621,6 +671,20 @@ class CarModel3DManagerTest {
         assertTrue(screenSource.contains("isHeroDark: Boolean = false"))
         assertTrue(screenSource.contains("normalActionContentColor = if (isHeroDark) Color.White else Color(0xFF141923)"))
         assertTrue(screenSource.contains("blurRadius = 3f"))
+    }
+
+    @Test
+    fun `hero contrast follows actual backdrop for 2d fallback in dark mode`() {
+        val workingDirectory = requireNotNull(System.getProperty("user.dir"))
+        val projectDir = generateSequence(File(workingDirectory)) { it.parentFile }
+            .first { File(it, "app").isDirectory }
+        val screenSource = File(projectDir, "app/src/main/java/com/leapauto/app/ui/LeapAutoScreen.kt").readText()
+
+        // 老款 2D 车型：无实景大图、无 3D 天幕时，2D 程序化渐变底色跟随系统深浅，避免深色模式深字撞暗底
+        assertTrue(screenSource.contains("val isHeroDark = when {"))
+        assertTrue(screenSource.contains("hasThemeBg -> ThemeManager.isHeroBackgroundDark(selectedThemeId, isDark)"))
+        assertTrue(screenSource.contains("show3D -> ThemeManager.isHeroBackgroundDark(selectedThemeId, isDark)"))
+        assertTrue(screenSource.contains("else -> isDark"))
     }
 
     @Test

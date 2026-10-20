@@ -61,6 +61,12 @@ class ClimateTileService : TileService() {
             return
         }
 
+        if (ControlService.isCommandInFlight()) {
+            android.widget.Toast.makeText(context, "已有控车指令执行中，请稍候", android.widget.Toast.LENGTH_SHORT).show()
+            updateTileState(inProgress = true, customSubtitle = "指令执行中...")
+            return
+        }
+
         val snapshot = store.loadSelectedWidgetSnapshot()
         val isAcOn = snapshot?.acEnabled ?: false
         val targetCommand = if (isAcOn) "acOff" else "acOn"

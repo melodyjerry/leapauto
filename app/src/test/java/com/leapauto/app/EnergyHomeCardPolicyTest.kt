@@ -86,50 +86,6 @@ class EnergyHomeCardPolicyTest {
     }
 
     @Test
-    fun `calculateDynamicCardHeightDp allows the final card to fill large remaining screen space`() {
-        // density = 3.0f, viewport = 800dp (2400px), topContent = 460dp (1380px),
-        // topPadding = 4dp (12px), spacing = 8dp (24px), bottomPadding = 12dp (36px)
-        val calculated = EnergyHomeCardPolicy.calculateDynamicCardHeightDp(
-            viewportHeightPx = 2400,
-            topContentHeightPx = 1380,
-            topPaddingPx = 12,
-            spacingPx = 24,
-            bottomPaddingPx = 36,
-            density = 3.0f
-        )
-        assertEquals(316.0f, calculated, 0.01f)
-    }
-
-    @Test
-    fun `calculateDynamicCardHeightDp clamps to minimum height when remaining space is small`() {
-        // density = 3.0f, viewport = 700dp (2100px), topContent = 600dp (1800px),
-        // topPadding = 4dp (12px), spacing = 8dp (24px), bottomPadding = 12dp (36px)
-        // remaining = (2100 - 1800 - 12 - 24 - 36) / 3 = 76dp < MIN_CARD_HEIGHT_DP (135dp)
-        val calculated = EnergyHomeCardPolicy.calculateDynamicCardHeightDp(
-            viewportHeightPx = 2100,
-            topContentHeightPx = 1800,
-            topPaddingPx = 12,
-            spacingPx = 24,
-            bottomPaddingPx = 36,
-            density = 3.0f
-        )
-        assertEquals(135.0f, calculated, 0.01f)
-    }
-
-    @Test
-    fun `calculateDynamicCardHeightDp returns default minimum when top content unmeasured`() {
-        val calculated = EnergyHomeCardPolicy.calculateDynamicCardHeightDp(
-            viewportHeightPx = 2400,
-            topContentHeightPx = 0,
-            topPaddingPx = 12,
-            spacingPx = 24,
-            bottomPaddingPx = 36,
-            density = 3.0f
-        )
-        assertEquals(135.0f, calculated, 0.01f)
-    }
-
-    @Test
     fun `viewport fill height uses the card real position relative to the home viewport`() {
         assertEquals(
             350,

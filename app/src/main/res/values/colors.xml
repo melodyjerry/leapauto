@@ -3,9 +3,6 @@
     <color name="leap_blue">#0066FF</color>
     <color name="energy_green">#00C853</color>
     <color name="alert_red">#FF3B30</color>
-    <color name="feedback_icon">#000000</color>
-    <!-- Cool neutral surface keeps the opaque widget from reading as a stark white board. -->
-    <color name="widget_surface">#F4F6F8</color>
     <color name="widget_on_surface">#101828</color>
     <color name="widget_on_surface_variant">#2D3748</color>
     <color name="widget_action_pressed">#E8EDF2</color>
@@ -24,7 +21,7 @@
     <color name="widget_range_critical_high_contrast">#D91F16</color>
     <color name="widget_fuel_range_high_contrast">#C56F00</color>
     <color name="widget_fuel_range_track_high_contrast">#B8A07A</color>
-    <color name="widget_text_shadow">#FFFFFFFF</color>
+    <color name="widget_text_shadow">#00000000</color>
     <color name="widget_card_border">#B3FFFFFF</color>
     <color name="widget_surface_75">#CCF4F6F8</color>
     <color name="widget_surface_50">#80F4F6F8</color>

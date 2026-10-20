@@ -329,4 +329,30 @@ class EnergyAnalyticsTest {
         assertFalse(EnergyRefreshPolicy.canUseCachedData(now + 1L, now))
         assertFalse(EnergyRefreshPolicy.canUseCachedData(0L, now))
     }
+
+    @Test
+    fun `recent mileage day label formats today as 今天 and yesterday as 昨天 and earlier as month day`() {
+        val today = java.time.LocalDate.of(2026, 10, 19)
+
+        assertEquals("今天", EnergyWeekPeriodFormatter.recentMileageDayLabel("2026-10-19", today))
+        assertEquals("昨天", EnergyWeekPeriodFormatter.recentMileageDayLabel("2026-10-18", today))
+        assertEquals("10/17", EnergyWeekPeriodFormatter.recentMileageDayLabel("2026-10-17", today))
+        assertEquals("10/12", EnergyWeekPeriodFormatter.recentMileageDayLabel("2026-10-12", today))
+        assertEquals("10/17", EnergyWeekPeriodFormatter.recentMileageDayLabel("10/17", today))
+    }
+
+    @Test
+    fun `recent mileage day label correctly handles cross month and cross year yesterday transitions`() {
+        // 跨月边界：11月1日的昨天是10月31日
+        val firstDayOfMonth = java.time.LocalDate.of(2026, 11, 1)
+        assertEquals("今天", EnergyWeekPeriodFormatter.recentMileageDayLabel("2026-11-01", firstDayOfMonth))
+        assertEquals("昨天", EnergyWeekPeriodFormatter.recentMileageDayLabel("2026-10-31", firstDayOfMonth))
+        assertEquals("10/30", EnergyWeekPeriodFormatter.recentMileageDayLabel("2026-10-30", firstDayOfMonth))
+
+        // 跨年边界：1月1日的昨天是12月31日
+        val firstDayOfYear = java.time.LocalDate.of(2027, 1, 1)
+        assertEquals("今天", EnergyWeekPeriodFormatter.recentMileageDayLabel("2027-01-01", firstDayOfYear))
+        assertEquals("昨天", EnergyWeekPeriodFormatter.recentMileageDayLabel("2026-12-31", firstDayOfYear))
+        assertEquals("12/30", EnergyWeekPeriodFormatter.recentMileageDayLabel("2026-12-30", firstDayOfYear))
+    }
 }

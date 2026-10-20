@@ -23,9 +23,10 @@ class ControlService : Service() {
 
         @Volatile private var lastSensitiveCommand: String? = null
         @Volatile private var lastSensitiveEpochMs: Long = 0L
-    }
 
-    private val commandInFlight = AtomicBoolean(false)
+        private val commandInFlight = AtomicBoolean(false)
+        fun isCommandInFlight(): Boolean = commandInFlight.get()
+    }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -279,6 +280,7 @@ class ControlService : Service() {
                 notifyResult(error)
             } finally {
                 commandInFlight.set(false)
+                com.leapauto.app.tiles.TilePromptHelper.requestTilesUpdate(applicationContext)
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelfResult(startId)
             }

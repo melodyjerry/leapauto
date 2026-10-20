@@ -277,13 +277,6 @@ import kotlin.math.roundToInt
 private const val MAP_ACTION_NAVIGATE = "navigate"
 private const val SMS_RESEND_COUNTDOWN_SECONDS = 60
 
-private val HybridRangeIconSize = 16.dp
-private val PureElectricRangeValueSize = 38.sp
-private val PureElectricRangeValueLineHeight = 38.sp
-private val PureElectricRangeUnitSize = 16.sp
-private val PureElectricRangeUnitLineHeight = 18.sp
-private const val PureElectricProgressMaxWidthFraction = 0.44f
-
 data class Cmd(val name: String, val label: String, @DrawableRes val iconRes: Int)
 
 val allCommands = listOf(
@@ -1310,55 +1303,6 @@ private fun LoginContent(
 }
 
 @Composable
-private fun CabinDivider(
-    modifier: Modifier = Modifier,
-    horizontalPadding: androidx.compose.ui.unit.Dp = 16.dp
-) {
-    val isDark = LocalAppDarkTheme.current
-    val dividerColor = if (isDark) Color.White.copy(alpha = 0.08f) else Color(0xFF0F172A).copy(alpha = 0.06f)
-    Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = horizontalPadding)
-            .height(0.6.dp)
-            .background(
-                Brush.horizontalGradient(
-                    colors = listOf(
-                        Color.Transparent,
-                        dividerColor,
-                        dividerColor,
-                        Color.Transparent
-                    )
-                )
-            )
-    )
-}
-
-@Composable
-private fun CabinVerticalDivider(
-    height: androidx.compose.ui.unit.Dp = 80.dp,
-    modifier: Modifier = Modifier
-) {
-    val isDark = LocalAppDarkTheme.current
-    val dividerColor = if (isDark) Color.White.copy(alpha = 0.08f) else Color(0xFF0F172A).copy(alpha = 0.06f)
-    Box(
-        modifier = modifier
-            .width(0.6.dp)
-            .height(height)
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(
-                        Color.Transparent,
-                        dividerColor,
-                        dividerColor,
-                        Color.Transparent
-                    )
-                )
-            )
-    )
-}
-
-@Composable
 @OptIn(ExperimentalMaterial3Api::class)
 private fun HomeContent(
     isRefreshing: Boolean, vehicleVin: String, vehicleModel: String, vehicleDisplayModel: String = vehicleModel,
@@ -1486,7 +1430,7 @@ private fun HomeContent(
                             status = status,
                             modifier = Modifier
                                 .weight(1f)
-                                .height(105.dp),
+                                .height(120.dp),
                             onCarClick = onOpenHealthCheck,
                             seamless = false
                         )
@@ -1496,7 +1440,7 @@ private fun HomeContent(
                             onControl = onControl,
                             modifier = Modifier
                                 .weight(1f)
-                                .height(105.dp),
+                                .height(120.dp),
                             seamless = false
                         )
                     }
@@ -1618,64 +1562,6 @@ private fun HomeContent(
             controlFeedback = controlFeedback,
             onDismissControlFeedback = onDismissControlFeedback
         )
-    }
-}
-
-@Composable
-private fun ControlFeedbackBanner(feedback: ControlFeedback, onDismiss: () -> Unit) {
-    val accent = when (feedback.kind) {
-        ControlFeedbackKind.SUCCESS -> MaterialTheme.statusGood
-        ControlFeedbackKind.WARNING -> MaterialTheme.statusWarn
-        ControlFeedbackKind.ERROR -> MaterialTheme.colorScheme.error
-        ControlFeedbackKind.SUBMITTED,
-        ControlFeedbackKind.IN_PROGRESS -> MaterialTheme.colorScheme.primary
-    }
-    val container = accent.copy(alpha = 0.12f)
-
-    LaunchedEffect(feedback) {
-        ControlFeedbackDisplayPolicy.autoDismissDelayMs(feedback.kind)?.let { delayMs ->
-            kotlinx.coroutines.delay(delayMs)
-            onDismiss()
-        }
-    }
-
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        color = container
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 11.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            if (feedback.kind == ControlFeedbackKind.IN_PROGRESS) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(18.dp),
-                    strokeWidth = 2.dp,
-                    color = accent
-                )
-            } else {
-                Icon(
-                    painter = painterResource(
-                        when (feedback.kind) {
-                            ControlFeedbackKind.SUCCESS -> R.drawable.ic_phosphor_check
-                            ControlFeedbackKind.SUBMITTED -> R.drawable.ic_phosphor_arrow_clockwise
-                            else -> R.drawable.ic_phosphor_warning
-                        }
-                    ),
-                    contentDescription = null,
-                    tint = accent,
-                    modifier = Modifier.size(18.dp)
-                )
-            }
-            Spacer(Modifier.width(10.dp))
-            Text(
-                feedback.message,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.weight(1f)
-            )
-        }
     }
 }
 
@@ -4087,7 +3973,10 @@ private fun Widget4x2ActionsDialog(
 }
 
 @Composable
-private fun DrivingBreathingDot(modifier: Modifier = Modifier) {
+private fun DrivingBreathingDot(
+    modifier: Modifier = Modifier,
+    color: Color = Color(0xFF00E676)
+) {
     val transition = rememberInfiniteTransition(label = "drivingBreathing")
     val haloScale by transition.animateFloat(
         initialValue = 0.8f,
@@ -4099,8 +3988,8 @@ private fun DrivingBreathingDot(modifier: Modifier = Modifier) {
         label = "haloScale"
     )
     val haloAlpha by transition.animateFloat(
-        initialValue = 0.15f,
-        targetValue = 0.55f,
+        initialValue = 0.20f,
+        targetValue = 0.65f,
         animationSpec = infiniteRepeatable(
             animation = tween(durationMillis = 1100, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
@@ -4108,7 +3997,7 @@ private fun DrivingBreathingDot(modifier: Modifier = Modifier) {
         label = "haloAlpha"
     )
     val coreAlpha by transition.animateFloat(
-        initialValue = 0.65f,
+        initialValue = 0.75f,
         targetValue = 1.0f,
         animationSpec = infiniteRepeatable(
             animation = tween(durationMillis = 1100, easing = FastOutSlowInEasing),
@@ -4117,17 +4006,17 @@ private fun DrivingBreathingDot(modifier: Modifier = Modifier) {
         label = "coreAlpha"
     )
 
-    Box(modifier.size(10.dp), contentAlignment = Alignment.Center) {
+    Box(modifier.size(11.dp), contentAlignment = Alignment.Center) {
         Box(
             Modifier
-                .size(10.dp)
+                .size(11.dp)
                 .graphicsLayer {
                     scaleX = haloScale
                     scaleY = haloScale
                     alpha = haloAlpha
                 }
                 .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.primary)
+                .background(color.copy(alpha = 0.40f))
         )
         Box(
             Modifier
@@ -4136,7 +4025,7 @@ private fun DrivingBreathingDot(modifier: Modifier = Modifier) {
                     alpha = coreAlpha
                 }
                 .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.primary)
+                .background(color)
         )
     }
 }
@@ -4263,12 +4152,6 @@ internal fun solidDialogModifier(
         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f),
         shape = shape
     )
-
-@Composable
-internal fun frostedGlassDialogModifier(
-    shape: androidx.compose.ui.graphics.Shape = RoundedCornerShape(24.dp),
-    auraColor: Color? = null
-): Modifier = solidDialogModifier(shape)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -4411,15 +4294,25 @@ fun VehicleHero(
 
     val pageBg = MaterialTheme.colorScheme.background
     val heroCardShape = RoundedCornerShape(16.dp)
-    val isHeroDark = ThemeManager.isHeroBackgroundDark(selectedThemeId, isDark)
-    val heroPrimaryTextColor = if (isHeroDark) Color.White else Color(0xFF141923)
-    val heroSecondaryTextColor = if (isHeroDark) Color.White.copy(alpha = 0.90f) else Color(0xFF4A5568)
 
     var activeThemeBgBitmap by remember(selectedThemeId, vehicleImageVersion) {
         val bmp = ThemeManager.load3dBgBitmap(context, selectedThemeId)
         android.util.Log.i("ThemeDebug", "HomeContent remember: themeId=$selectedThemeId, version=$vehicleImageVersion, bmp=${bmp != null}")
         mutableStateOf(bmp)
     }
+    // 首卡底色判定：有实景大图/3D 天幕时按主题固有色调；否则为程序化 2D 微晶渐变，跟随系统深浅，
+    // 避免老款 2D 车型在深色模式下的深色文字与暗底撞色看不清
+    val hasThemeBg = activeThemeBgBitmap != null && selectedThemeId != ThemeManager.ORIGINAL_SKYBOX_THEME_ID
+    val isHeroDark = when {
+        hasThemeBg -> ThemeManager.isHeroBackgroundDark(selectedThemeId, isDark)
+        show3D -> ThemeManager.isHeroBackgroundDark(selectedThemeId, isDark)
+        else -> isDark
+    }
+    val heroPrimaryTextColor = if (isHeroDark) Color.White else Color(0xFF141923)
+    val heroSecondaryTextColor = if (isHeroDark) Color.White.copy(alpha = 0.90f) else Color(0xFF4A5568)
+    val defaultPillBg = if (isHeroDark) Color(0xFF131722).copy(alpha = 0.68f) else Color.White.copy(alpha = 0.90f)
+    val pillBorderStroke = BorderStroke(0.5.dp, if (isHeroDark) Color.White.copy(alpha = 0.22f) else Color.Black.copy(alpha = 0.12f))
+    val pillContentColor = if (isHeroDark) Color.White else Color(0xFF141923)
 
     // 默认主题/自选主题自愈检测：若本地高清背景尚未就绪，异步静默下载并即时上屏
     androidx.compose.runtime.LaunchedEffect(selectedThemeId, vehicleVin) {
@@ -4446,7 +4339,6 @@ fun VehicleHero(
             }
         }
     }
-    val hasThemeBg = activeThemeBgBitmap != null && selectedThemeId != ThemeManager.ORIGINAL_SKYBOX_THEME_ID
     val isImmersive = show3D || hasThemeBg
 
     Surface(
@@ -4660,17 +4552,30 @@ fun VehicleHero(
                         }
                         if (status?.sentryMode == true) {
                             Surface(
-                                shape = RoundedCornerShape(6.dp),
-                                color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.55f),
-                                contentColor = MaterialTheme.colorScheme.error.copy(alpha = 0.90f)
+                                shape = RoundedCornerShape(percent = 50),
+                                color = defaultPillBg,
+                                contentColor = MaterialTheme.colorScheme.error,
+                                border = BorderStroke(0.8.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.50f)),
+                                shadowElevation = 0.dp
                             ) {
-                                Text(
-                                    "哨兵已开",
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    maxLines = 1
-                                )
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 1.5.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(3.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(5.dp)
+                                            .background(MaterialTheme.colorScheme.error, CircleShape)
+                                    )
+                                    Text(
+                                        "哨兵已开",
+                                        style = MaterialTheme.typography.labelSmall.copy(lineHeight = 11.sp),
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        maxLines = 1
+                                    )
+                                }
                             }
                         }
                     }
@@ -4693,8 +4598,10 @@ fun VehicleHero(
 
                     // 方案 A 智能座舱极光双色微晶体系：
                     // 1. 里程大字统一为纯净微晶高光白 (深色/暗调主题) / 深邃科技黑曜灰 (浅色高光主题)
-                    val mileageDisplayColor = heroPrimaryTextColor
-                    val unitDisplayColor = heroSecondaryTextColor
+                    // 余晖石筑（5）暮色底图偏暗，里程数字与单位强制高对比纯白，避免深色数字看不清
+                    val isYuhuiStoneTheme = selectedThemeId == "5"
+                    val mileageDisplayColor = if (isYuhuiStoneTheme) Color.White else heroPrimaryTextColor
+                    val unitDisplayColor = if (isYuhuiStoneTheme) Color.White.copy(alpha = 0.90f) else heroSecondaryTextColor
 
                     // 2. 纯电与增程纯电百分比：极光薄荷青 (深色 #00E676 / 浅色 #00B42A) / 警示色
                     val auroraMintGreen = if (isDark) Color(0xFF00E676) else Color(0xFF00B42A)
@@ -4893,6 +4800,7 @@ fun VehicleHero(
 
                                 ChargingCenterPill(
                                     status = status,
+                                    isHeroDark = isHeroDark,
                                     onClick = onOpenHealthyCharging
                                 )
                             }
@@ -4910,6 +4818,7 @@ fun VehicleHero(
                                 )
                                 ChargingCenterPill(
                                     status = status,
+                                    isHeroDark = isHeroDark,
                                     onClick = onOpenHealthyCharging
                                 )
                             }
@@ -4962,10 +4871,6 @@ fun VehicleHero(
                     val displayAddress = if (address != null && address.length > 10) "${address.take(10)}..." else address
 
                     // 1. 位置信息胶囊 (在上面)
-                    val defaultPillBg = if (isHeroDark) Color(0xFF131722).copy(alpha = 0.68f) else Color.White.copy(alpha = 0.90f)
-                    val pillBorderStroke = BorderStroke(0.5.dp, if (isHeroDark) Color.White.copy(alpha = 0.22f) else Color.Black.copy(alpha = 0.12f))
-                    val pillContentColor = if (isHeroDark) Color.White else Color(0xFF141923)
-
                     if (displayAddress != null) {
                         Spacer(Modifier.height(2.dp))
                         Surface(
@@ -4979,21 +4884,21 @@ fun VehicleHero(
                             shadowElevation = 0.dp
                         ) {
                             Row(
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp),
+                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 1.5.dp),
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(2.dp)
+                                horizontalArrangement = Arrangement.spacedBy(3.dp)
                             ) {
                                 Icon(
                                     painter = painterResource(R.drawable.ic_location_pin),
                                     contentDescription = null,
-                                    modifier = Modifier.size(9.dp),
+                                    modifier = Modifier.size(10.dp),
                                     tint = pillContentColor
                                 )
                                 Text(
                                     text = displayAddress,
                                     style = MaterialTheme.typography.labelSmall.copy(lineHeight = 11.sp),
                                     fontSize = 10.sp,
-                                    fontWeight = FontWeight.Medium,
+                                    fontWeight = FontWeight.SemiBold,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
@@ -5003,29 +4908,29 @@ fun VehicleHero(
 
                     // 2. 驻车/行驶状态胶囊 (在下面)
                     Spacer(Modifier.height(2.5.dp))
-                    val pillBgColor = if (isMoving) {
-                        MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
-                    } else {
-                        defaultPillBg
-                    }
+                    val movingPillBorder = BorderStroke(
+                        0.8.dp,
+                        if (isHeroDark) Color(0xFF00E676).copy(alpha = 0.50f)
+                        else MaterialTheme.colorScheme.primary.copy(alpha = 0.50f)
+                    )
 
                     Surface(
                         modifier = Modifier
                             .clip(RoundedCornerShape(percent = 50))
                             .clickable(onClick = onParkingClick),
                         shape = RoundedCornerShape(percent = 50),
-                        color = pillBgColor,
-                        contentColor = if (isMoving) MaterialTheme.colorScheme.primary else pillContentColor,
-                        border = if (isMoving) BorderStroke(0.5.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)) else pillBorderStroke,
+                        color = defaultPillBg,
+                        contentColor = pillContentColor,
+                        border = if (isMoving) movingPillBorder else pillBorderStroke,
                         shadowElevation = 0.dp
                     ) {
                         Row(
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp),
+                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 1.5.dp),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(2.dp)
+                            horizontalArrangement = Arrangement.spacedBy(3.5.dp)
                         ) {
                             if (isMoving) {
-                                DrivingBreathingDot()
+                                DrivingBreathingDot(color = Color(0xFF00E676))
                             } else {
                                 Box(
                                     modifier = Modifier
@@ -5037,7 +4942,8 @@ fun VehicleHero(
                                 text = stateLabel,
                                 style = MaterialTheme.typography.labelSmall.copy(lineHeight = 11.sp),
                                 fontSize = 10.sp,
-                                fontWeight = FontWeight.Medium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = pillContentColor,
                                 maxLines = 1
                             )
                         }
@@ -5520,76 +5426,6 @@ private fun VehicleSelectorDialog(
     )
 }
 
-@Composable
-private fun RangeModeLabel(rangeModeLabel: String, modifier: Modifier = Modifier) {
-    Text(
-        text = rangeModeLabel,
-        modifier = modifier
-            .clip(RoundedCornerShape(4.dp))
-            .background(
-                color = MaterialTheme.glassInsetSurface.copy(alpha = 0.75f),
-                shape = RoundedCornerShape(4.dp)
-            )
-            .border(
-                width = 0.5.dp,
-                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.40f),
-                shape = RoundedCornerShape(4.dp)
-            )
-            .padding(horizontal = 3.5.dp, vertical = 0.5.dp),
-        style = MaterialTheme.typography.labelSmall.copy(fontSize = 12.sp),
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        maxLines = 1
-    )
-}
-
-@Composable
-private fun HybridRangeBreakdown(
-    electricMileage: String?,
-    fuelMileage: String?,
-    electricSoc: String?,
-    fuelSoc: String?,
-    electricColor: Color,
-    fuelColor: Color
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .offset(y = (-4).dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        HybridRangeMetric(
-            modifier = Modifier.weight(1f),
-            mileage = electricMileage,
-            percentage = VehicleStatusMapper.displayPreciseSoc(electricSoc),
-            progress = chargeProgress(electricSoc),
-            color = electricColor,
-            icon = {
-                Icon(
-                    painter = painterResource(R.drawable.ic_hybrid_electric),
-                    contentDescription = "纯电续航",
-                    tint = electricColor,
-                    modifier = Modifier.size(HybridRangeIconSize)
-                )
-            }
-        )
-        HybridRangeMetric(
-            modifier = Modifier.weight(1f),
-            mileage = fuelMileage,
-            percentage = VehicleStatusMapper.displayPreciseSoc(fuelSoc),
-            progress = chargeProgress(fuelSoc),
-            color = fuelColor,
-            icon = {
-                Icon(
-                    painter = painterResource(R.drawable.ic_hybrid_fuel),
-                    contentDescription = "燃油续航",
-                    tint = fuelColor,
-                    modifier = Modifier.size(HybridRangeIconSize)
-                )
-            }
-        )
-    }
-}
-
 internal enum class ChargingPillType {
     CHARGING,
     CHARGED,
@@ -5652,6 +5488,7 @@ internal object ChargingCenterPillPresentation {
 @Composable
 private fun ChargingCenterPill(
     status: VehicleStatus?,
+    isHeroDark: Boolean = false,
     onClick: () -> Unit
 ) {
     val pillModel = remember(
@@ -5670,44 +5507,39 @@ private fun ChargingCenterPill(
         )
     }
 
-    val isDark = LocalAppDarkTheme.current
-    val borderColor = when (pillModel.type) {
-        ChargingPillType.CHARGING -> MaterialTheme.statusGood.copy(alpha = if (isDark) 0.60f else 0.70f)
-        ChargingPillType.CHARGED -> MaterialTheme.statusGood.copy(alpha = if (isDark) 0.55f else 0.65f)
-        ChargingPillType.GUN_CONNECTED -> MaterialTheme.statusGood.copy(alpha = if (isDark) 0.45f else 0.55f)
-        ChargingPillType.SCHEDULED_WAITING,
-        ChargingPillType.DEFAULT -> if (isDark) {
-            Color.White.copy(alpha = 0.18f)
-        } else {
-            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.60f)
-        }
-    }
-    val backgroundColor = when (pillModel.type) {
-        ChargingPillType.CHARGING -> MaterialTheme.statusGood.copy(alpha = if (isDark) 0.22f else 0.16f)
-        ChargingPillType.CHARGED -> MaterialTheme.statusGood.copy(alpha = if (isDark) 0.18f else 0.14f)
-        ChargingPillType.GUN_CONNECTED -> MaterialTheme.statusGood.copy(alpha = if (isDark) 0.16f else 0.12f)
-        ChargingPillType.SCHEDULED_WAITING,
-        ChargingPillType.DEFAULT -> if (isDark) {
-            Color(0xFF131722).copy(alpha = 0.68f)
-        } else {
-            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.60f)
-        }
-    }
-    val textColor = if (isDark) Color.White else MaterialTheme.colorScheme.onSurface
+    val isChargingActive = pillModel.type == ChargingPillType.CHARGING ||
+        pillModel.type == ChargingPillType.CHARGED ||
+        pillModel.type == ChargingPillType.GUN_CONNECTED
+
+    val defaultPillBg = if (isHeroDark) Color(0xFF131722).copy(alpha = 0.68f) else Color.White.copy(alpha = 0.90f)
+    val pillBorderStroke = BorderStroke(
+        0.5.dp,
+        if (isHeroDark) Color.White.copy(alpha = 0.22f) else Color.Black.copy(alpha = 0.12f)
+    )
+    val chargingActiveBorder = BorderStroke(
+        0.8.dp,
+        MaterialTheme.statusGood.copy(alpha = if (isHeroDark) 0.55f else 0.70f)
+    )
+    val pillContentColor = if (isHeroDark) Color.White else Color(0xFF141923)
+
+    val backgroundColor = defaultPillBg
+    val border = if (isChargingActive) chargingActiveBorder else pillBorderStroke
+    val textColor = if (isChargingActive) MaterialTheme.statusGood else pillContentColor
 
     Surface(
         shape = RoundedCornerShape(percent = 50),
         color = backgroundColor,
-        border = BorderStroke(0.5.dp, borderColor),
+        contentColor = textColor,
+        border = border,
         shadowElevation = 0.dp,
         modifier = Modifier
             .clip(RoundedCornerShape(percent = 50))
             .clickable(onClick = onClick)
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 6.dp, vertical = 0.5.dp),
+            modifier = Modifier.padding(horizontal = 7.dp, vertical = 1.5.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(3.dp)
+            horizontalArrangement = Arrangement.spacedBy(3.5.dp)
         ) {
             when {
                 pillModel.hasBoltIcon -> {
@@ -5798,90 +5630,6 @@ private fun EnergyCapsuleProgressBar(
                     .background(progressBrush)
             )
         }
-    }
-}
-
-@Composable
-private fun HybridRangeMetric(
-    modifier: Modifier,
-    mileage: String?,
-    percentage: String?,
-    progress: Float,
-    color: Color,
-    icon: @Composable () -> Unit
-) {
-    val animatedProgress by animateFloatAsState(
-        targetValue = progress.coerceIn(0f, 1f),
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioNoBouncy,
-            stiffness = Spring.StiffnessLow
-        ),
-        label = "hybridProgress"
-    )
-    Column(
-        modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(3.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            Box(
-                modifier = Modifier.size(18.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                icon()
-            }
-            Text(
-                text = compactRangeLabel(mileage),
-                style = MaterialTheme.typography.labelMedium,
-                color = color,
-                maxLines = 1,
-                softWrap = false,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f)
-            )
-            percentage?.let {
-                Text(
-                    text = it,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = color,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1
-                )
-            }
-        }
-        EnergyCapsuleProgressBar(
-            progress = animatedProgress,
-            color = color,
-            modifier = Modifier.fillMaxWidth()
-        )
-    }
-}
-
-private fun compactRangeLabel(raw: String?): String {
-    val value = raw
-        ?.trim()
-        ?.removeSuffix("km")
-        ?.trim()
-        ?.takeIf { it.isNotBlank() && it != "--" }
-        ?: return "--"
-    return "${value}km"
-}
-
-private fun rangeColorForSoc(
-    soc: String?,
-    fallback: Color,
-    normal: Color,
-    warning: Color,
-    critical: Color
-): Color {
-    if (VehicleStatusMapper.displayPreciseSoc(soc) == null) return fallback
-    return when (VehicleHomeStatus.socBand(soc)) {
-        VehicleHomeStatus.SocBand.NORMAL -> normal
-        VehicleHomeStatus.SocBand.WARNING -> warning
-        VehicleHomeStatus.SocBand.CRITICAL -> critical
     }
 }
 
@@ -7268,7 +7016,6 @@ private fun HomeTirePressureCard(
     seamless: Boolean = false
 ) {
     val tireByPosition = status?.tires.orEmpty().associateBy { it.position }
-    val hasTireData = tireByPosition.isNotEmpty()
     val hasWarning = tireByPosition.values.any { it.warning }
     val cardBorder = glassCardBorder()
     val warningColor = MaterialTheme.colorScheme.error
@@ -7276,7 +7023,7 @@ private fun HomeTirePressureCard(
     val auraColor = if (hasWarning) warningColor.copy(alpha = 0.14f) else goodColor.copy(alpha = 0.10f)
     Surface(
         modifier = modifier
-            .heightIn(min = 105.dp)
+            .heightIn(min = 120.dp)
             .then(
                 if (!seamless) Modifier.frostedGlassCard(
                     shape = RoundedCornerShape(16.dp),
@@ -7329,7 +7076,7 @@ private fun HomeTirePressureCard(
                 Column(
                     modifier = Modifier.weight(1f),
                     horizontalAlignment = Alignment.End,
-                    verticalArrangement = Arrangement.spacedBy(18.dp)
+                    verticalArrangement = Arrangement.spacedBy(22.dp)
                 ) {
                     HomeTireValueDisplay(tireByPosition["左前"], alignEnd = true)
                     HomeTireValueDisplay(tireByPosition["左后"], alignEnd = true)
@@ -7344,8 +7091,8 @@ private fun HomeTirePressureCard(
                     leftRearWarning = tireByPosition["左后"]?.warning == true,
                     rightRearWarning = tireByPosition["右后"]?.warning == true,
                     modifier = Modifier
-                        .size(width = 46.dp, height = 94.dp)
-                        .clip(RoundedCornerShape(23.dp))
+                        .size(width = 48.dp, height = 100.dp)
+                        .clip(RoundedCornerShape(24.dp))
                         .clickable(onClick = onCarClick)
                 )
 
@@ -7355,7 +7102,7 @@ private fun HomeTirePressureCard(
                 Column(
                     modifier = Modifier.weight(1f),
                     horizontalAlignment = Alignment.Start,
-                    verticalArrangement = Arrangement.spacedBy(18.dp)
+                    verticalArrangement = Arrangement.spacedBy(22.dp)
                 ) {
                     HomeTireValueDisplay(tireByPosition["右前"], alignEnd = false)
                     HomeTireValueDisplay(tireByPosition["右后"], alignEnd = false)
@@ -7735,7 +7482,6 @@ fun HomeTireCell(position: String, tire: TireStatus?, modifier: Modifier = Modif
 @Composable
 fun VehicleStatusCard(
     status: VehicleStatus?,
-    todayMileage: String = "--",
     modifier: Modifier = Modifier,
     powerAutoPlayEnabled: Boolean = false,
     onOpenHealthyCharging: () -> Unit = {},
@@ -7775,7 +7521,7 @@ fun VehicleStatusCard(
     }
     Surface(
         modifier = modifier
-            .heightIn(min = 105.dp)
+            .heightIn(min = 120.dp)
             .then(
                 if (!seamless) Modifier.frostedGlassCard(
                     shape = RoundedCornerShape(16.dp),
@@ -7791,7 +7537,7 @@ fun VehicleStatusCard(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 5.dp, vertical = 5.dp),
+                .padding(horizontal = 5.dp, vertical = 6.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             Row(
@@ -7867,8 +7613,8 @@ fun VehicleStatusCard(
                             contentAlignment = Alignment.Center
                         ) {
                             Column(
-                                modifier = Modifier.padding(start = 2.dp, top = 5.5.dp, end = 2.dp, bottom = 9.5.dp),
-                                verticalArrangement = Arrangement.spacedBy(1.5.dp),
+                                modifier = Modifier.padding(start = 2.dp, top = 7.dp, end = 2.dp, bottom = 12.dp),
+                                verticalArrangement = Arrangement.spacedBy(2.dp),
                                 horizontalAlignment = Alignment.CenterHorizontally
                             ) {
                                 Text(
@@ -7894,7 +7640,7 @@ fun VehicleStatusCard(
                             Row(
                                 modifier = Modifier
                                     .align(Alignment.BottomCenter)
-                                    .padding(bottom = 3.5.dp),
+                                    .padding(bottom = 4.5.dp),
                                 horizontalArrangement = Arrangement.spacedBy(2.5.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
@@ -7980,7 +7726,7 @@ fun VehicleStatusCell(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 2.dp, vertical = 7.dp),
+                .padding(horizontal = 2.dp, vertical = 8.5.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
@@ -7990,7 +7736,7 @@ fun VehicleStatusCell(
                 fontWeight = FontWeight.Normal,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            Spacer(Modifier.height(2.dp))
+            Spacer(Modifier.height(3.dp))
             val finalColor = valueColor ?: when {
                 warning -> MaterialTheme.colorScheme.error
                 else -> MaterialTheme.colorScheme.onSurface
@@ -8018,9 +7764,6 @@ fun VehicleStatusCell(
         }
     }
 }
-
-private fun batteryPercentage(status: VehicleStatus?): String =
-    VehicleHomeStatus.resolvedSocLabel(status?.preciseSoc, status?.soc)
 
 fun chargeProgress(soc: String?): Float = VehicleStatusMapper.socFraction(soc)
 
@@ -9249,37 +8992,6 @@ fun EnergyHomeMileagePage(data: EnergyAnalyticsData) {
 }
 
 @Composable
-private fun EnergyHomeMetricLine(
-    label: String,
-    value: String,
-    valueColor: Color = MaterialTheme.colorScheme.onSurface,
-    valueBold: Boolean = true
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            label,
-            style = MaterialTheme.typography.labelLarge.energyStyle(),
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1
-        )
-        Text(
-            value,
-            style = MaterialTheme.typography.titleMedium.energyStyle(),
-            color = valueColor,
-            fontWeight = FontWeight.Bold,
-            maxLines = 1,
-            softWrap = false,
-            overflow = TextOverflow.Ellipsis
-        )
-    }
-}
-
-@Composable
 private fun EnergyHomeBars(
     points: List<com.leapauto.app.EnergySeriesPoint>,
     modifier: Modifier = Modifier
@@ -9588,7 +9300,7 @@ private fun EnergyHomeLineChart(
                 labelPaint
             )
             drawContext.canvas.nativeCanvas.drawText(
-                EnergyWeekPeriodFormatter.monthDay(points.single().label),
+                EnergyWeekPeriodFormatter.recentMileageDayLabel(points.single().label),
                 center.x,
                 dateY,
                 labelPaint
@@ -9655,7 +9367,7 @@ private fun EnergyHomeLineChart(
                     labelPaint
                 )
 
-                val dateStr = EnergyWeekPeriodFormatter.monthDay(points[index].label)
+                val dateStr = EnergyWeekPeriodFormatter.recentMileageDayLabel(points[index].label)
                 val dateWidth = labelPaint.measureText(dateStr)
                 val dateHalfWidth = dateWidth / 2f
                 val dateX = point.x.coerceIn(dateHalfWidth + 2.dp.toPx(), size.width - dateHalfWidth - 2.dp.toPx())
@@ -9979,14 +9691,6 @@ fun ClimateOverviewCard(
     }
 }
 
-private fun climateModeLabel(status: VehicleStatus): String? = when {
-    status.acOperateMode == 1 && status.climateMode == 0 -> "自动空调"
-    status.climateMode == 1 -> "快速制冷"
-    status.climateMode == 3 -> "快速制热"
-    status.climateMode == 4 -> "通风除味"
-    else -> null
-}
-
 private fun activeClimatePresetName(status: VehicleStatus?): String? {
     if (status?.acSwitch != true) return null
     if (status.windshieldDefrost == true) return ClimatePresetAction.WINDSHIELD_DEFROST.name
@@ -10003,9 +9707,6 @@ private fun activeClimatePresetName(status: VehicleStatus?): String? {
         else -> null
     }
 }
-
-private fun circulationModeLabel(status: VehicleStatus): String? =
-    AirCircle.fromTelemetryValue(status.recirculationMode)?.displayLabel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -10131,16 +9832,16 @@ fun ClimateControlBottomSheet(
     val isDefrostActive = activePresetName == ClimatePresetAction.WINDSHIELD_DEFROST.name ||
         editedDefogging || status?.windshieldDefrost == true
     val temperatureTarget = Commands.acTemperatureTarget(status?.acSetting)
-    val indoorTemp = climateWholeNumber(status?.indoorTemp)
     val climateTone = when {
         activePresetName == ClimatePresetAction.QUICK_COOL.name -> ClimateTemperatureTone.COOLING
         activePresetName == ClimatePresetAction.QUICK_HEAT.name -> ClimateTemperatureTone.HEATING
         isDefrostActive -> ClimateTemperatureTone.COOLING
-        status?.acCoolingAndHeating == 1 -> ClimateTemperatureTone.COOLING
-        status?.acCoolingAndHeating == 2 -> ClimateTemperatureTone.HEATING
-        indoorTemp != null && editedTemperature < indoorTemp -> ClimateTemperatureTone.COOLING
-        indoorTemp != null && editedTemperature > indoorTemp -> ClimateTemperatureTone.HEATING
-        else -> ClimateTemperatureTone.COOLING
+        else -> ClimateTemperatureToneResolver.tone(
+            acEnabled = isAcOn,
+            coolingAndHeating = status?.acCoolingAndHeating,
+            climateMode = status?.climateMode,
+            targetTemperature = temperatureTarget.value
+        )
     }
     val activeAcModeText = when {
         !isAcOn -> "空调已关闭"
@@ -11392,12 +11093,6 @@ fun ClimateStatusItem(label: String, value: String, modifier: Modifier = Modifie
         Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, maxLines = 2)
     }
-}
-
-private fun climateBooleanLabel(value: Boolean?): String = when (value) {
-    true -> "已开启"
-    false -> "已关闭"
-    null -> "未同步"
 }
 
 fun displayClimateTemperature(target: AcTemperatureTarget): String = "${target.value} °C"

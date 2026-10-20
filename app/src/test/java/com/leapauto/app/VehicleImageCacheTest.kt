@@ -115,4 +115,78 @@ class VehicleImageCacheTest {
             )
         )
     }
+
+    @Test
+    fun `custom vehicle image file can be created and deleted independently`() {
+        val tempDir = java.io.File(System.getProperty("java.io.tmpdir"), "test_vehicle_cache_${System.currentTimeMillis()}")
+        tempDir.mkdirs()
+        try {
+            val context = object : android.content.ContextWrapper(null) {
+                override fun getFilesDir(): java.io.File = tempDir
+            }
+            val vin = "TEST_VIN_RESET_FLOW"
+            val customFile = VehicleImageCache.getCustomFile(context, vin)
+            customFile.writeText("custom-image-binary-placeholder")
+            org.junit.Assert.assertTrue(customFile.exists())
+
+            if (customFile.exists()) customFile.delete()
+
+            org.junit.Assert.assertFalse(customFile.exists())
+            val officialFile = VehicleImageCache.getCacheFile(context, vin)
+            org.junit.Assert.assertEquals("TEST_VIN_RESET_FLOW.png", officialFile.name)
+        } finally {
+            tempDir.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `removing custom image transitions widget source resolution to official or 3d snapshot`() {
+        val sourceWithCustom = VehicleImageCache.resolveWidgetImageSource(
+            hasCustomImage = true,
+            has3DSnapshot = true,
+            hasOfficial2DImage = true
+        )
+        assertEquals(VehicleImageCache.WidgetImageSource.CUSTOM, sourceWithCustom)
+
+        val sourceAfterResetWithSnapshot = VehicleImageCache.resolveWidgetImageSource(
+            hasCustomImage = false,
+            has3DSnapshot = true,
+            hasOfficial2DImage = true
+        )
+        assertEquals(VehicleImageCache.WidgetImageSource.THREE_D_SNAPSHOT, sourceAfterResetWithSnapshot)
+
+        val sourceAfterResetOfficialOnly = VehicleImageCache.resolveWidgetImageSource(
+            hasCustomImage = false,
+            has3DSnapshot = false,
+            hasOfficial2DImage = true
+        )
+        assertEquals(VehicleImageCache.WidgetImageSource.OFFICIAL_2D, sourceAfterResetOfficialOnly)
+    }
+
+    @Test
+    fun `resetCustomVehicleImage executes widget refresh asynchronously in worker thread`() {
+        val projectDir = projectDirectory()
+        val mainActivityFile = java.io.File(projectDir, "app/src/main/java/com/leapauto/app/MainActivity.kt")
+        val content = mainActivityFile.readText().replace("\r\n", "\n")
+
+        // 验证 resetCustomVehicleImage 不在主线程直接同步调用 ControlWidget.refreshData
+        val resetMethod = content.substringAfter("private fun resetCustomVehicleImage()")
+            .substringBefore("private fun switchVehicle")
+
+        org.junit.Assert.assertTrue(
+            "resetCustomVehicleImage 必须在 worker.execute 内部异步刷新小组件，杜绝主线程卡顿",
+            resetMethod.contains("worker.execute {\n            ControlWidget.refreshData(this@MainActivity)")
+        )
+        // 验证去除了主线程外层冗余的 CompactControlWidget.refreshData
+        org.junit.Assert.assertFalse(
+            "外层不应重复调用 CompactControlWidget.refreshData",
+            resetMethod.substringBefore("worker.execute").contains("CompactControlWidget.refreshData")
+        )
+    }
+
+    private fun projectDirectory(): java.io.File {
+        val workingDirectory = requireNotNull(System.getProperty("user.dir"))
+        return generateSequence(java.io.File(workingDirectory)) { it.parentFile }
+            .first { java.io.File(it, "app").isDirectory }
+    }
 }

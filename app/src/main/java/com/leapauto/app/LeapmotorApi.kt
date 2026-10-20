@@ -2252,30 +2252,6 @@ class LeapmotorApi internal constructor(
         return resp
     }
 
-    private fun gatewayFetchRaw(url: String, method: String): VehicleListRawResponse {
-        ensureFreshAccessToken()
-        val attempt = { httpRaw(url, method, newGatewayHeaders(emptyMap(), true)) }
-        var response = attempt()
-        val parsed = runCatching { JSONObject(response.rawBody) }.getOrNull()
-        if (response.statusCode == 401 || response.statusCode == 403 ||
-            (parsed != null && isAuthFailure(parsed))
-        ) {
-            try {
-                refreshAccessTokenWithFallback()
-            } catch (_: Exception) {
-                return response.copy(authenticationFailed = true)
-            }
-            response = preserveAuthenticationFailureOnRetry(response, attempt)
-            val retried = runCatching { JSONObject(response.rawBody) }.getOrNull()
-            if (response.statusCode == 401 || response.statusCode == 403 ||
-                (retried != null && isAuthFailure(retried))
-            ) {
-                return response.copy(authenticationFailed = true)
-            }
-        }
-        return response
-    }
-
     private fun ensureFreshAccessToken() {
         val auth = session.newAuth ?: throw ApiException("未登录")
         if (auth.accessTokenExpiresAt > 0 &&

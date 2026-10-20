@@ -988,14 +988,14 @@ object ClimateTemperatureToneResolver {
         targetTemperature: Int? = null
     ): ClimateTemperatureTone {
         if (acEnabled != true) return ClimateTemperatureTone.DEFAULT
-        if (coolingAndHeating == 2 || climateMode == 4) return ClimateTemperatureTone.VENTILATION
+        if (coolingAndHeating == 2 || climateMode == 4 || climateMode == 0) return ClimateTemperatureTone.VENTILATION
         return when (coolingAndHeating) {
             1 -> ClimateTemperatureTone.COOLING
             0 -> ClimateTemperatureTone.HEATING
             else -> when (climateMode) {
                 1 -> ClimateTemperatureTone.COOLING
-                3 -> ClimateTemperatureTone.HEATING
-                4 -> ClimateTemperatureTone.VENTILATION
+                2, 3 -> ClimateTemperatureTone.HEATING
+                0, 4 -> ClimateTemperatureTone.VENTILATION
                 else -> when {
                     targetTemperature != null && targetTemperature >= 27 -> ClimateTemperatureTone.HEATING
                     targetTemperature != null && targetTemperature <= 26 -> ClimateTemperatureTone.COOLING
@@ -1252,7 +1252,7 @@ object Commands {
         command.capability.fanMin?.let { require(command.windLevel >= it) { "空调风量低于当前车型能力范围" } }
         command.capability.fanMax?.let { require(command.windLevel <= it) { "空调风量超出当前车型能力范围" } }
         val (operate, mode) = when (command.operation) {
-            HvacOperation.ON -> "manual" to "cold"
+            HvacOperation.ON -> "manual" to (if (command.temperatureC >= 27) "hot" else "cold")
             HvacOperation.OFF -> "off" to "nohotcold"
             HvacOperation.FAST_COOL -> "manual" to "cold"
             HvacOperation.FAST_HEAT -> "manual" to "hot"

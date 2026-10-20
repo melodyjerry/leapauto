@@ -114,6 +114,30 @@ object EnergyWeekPeriodFormatter {
         val day = match.groupValues[3].toIntOrNull() ?: return value.trim()
         return "$month/$day"
     }
+
+    /**
+     * 近 7 天里程 X 轴标签格式化：
+     * - 当天转换为「今天」
+     * - 前一天转换为「昨天」
+     * - 其余历史日期转换为「M/D」格式
+     */
+    fun recentMileageDayLabel(
+        value: String,
+        today: java.time.LocalDate = java.time.LocalDate.now()
+    ): String {
+        return runCatching {
+            val match = isoDatePrefix.find(value) ?: return monthDay(value)
+            val year = match.groupValues[1].toIntOrNull() ?: today.year
+            val month = match.groupValues[2].toInt()
+            val day = match.groupValues[3].toInt()
+            val date = java.time.LocalDate.of(year, month, day)
+            when (date) {
+                today -> "今天"
+                today.minusDays(1) -> "昨天"
+                else -> "$month/$day"
+            }
+        }.getOrDefault(monthDay(value))
+    }
 }
 
 data class EnergyAnalyticsData(
@@ -152,21 +176,6 @@ object EnergyHomeCardPolicy {
     const val PAGE_COUNT = 4
     const val MIN_CARD_HEIGHT_DP = 135
     const val BOTTOM_PADDING_DP = 22
-
-    fun calculateDynamicCardHeightDp(
-        viewportHeightPx: Int,
-        topContentHeightPx: Int,
-        topPaddingPx: Int,
-        spacingPx: Int,
-        bottomPaddingPx: Int,
-        density: Float,
-        minHeightDp: Int = MIN_CARD_HEIGHT_DP
-    ): Float {
-        if (topContentHeightPx <= 0 || density <= 0f) return minHeightDp.toFloat()
-        val remainingPx = viewportHeightPx - topContentHeightPx - topPaddingPx - spacingPx - bottomPaddingPx
-        val remainingDp = remainingPx / density
-        return maxOf(minHeightDp.toFloat(), remainingDp)
-    }
 
     fun calculateViewportFillHeightPx(
         viewportHeightPx: Int,

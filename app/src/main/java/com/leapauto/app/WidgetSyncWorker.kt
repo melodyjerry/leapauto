@@ -58,7 +58,7 @@ class WidgetSyncWorker(appContext: Context, workerParams: WorkerParameters) :
                     electricTotalRange = VehicleStatusMapper.electricTotalRange(status),
                     fuelTotalRange = VehicleStatusMapper.fuelTotalRange(status),
                     statusLabel = WidgetStatusMapper.label(status, session.selectedCarType).orEmpty(),
-                    locked = WidgetStatusMapper.locked(status),
+                    locked = store.resolveEffectiveLock(current.selectedVin, WidgetStatusMapper.locked(status)),
                     acEnabled = WidgetAcMapper.state(status),
                     acTone = ClimateTemperatureToneResolver.tone(
                         acEnabled = WidgetAcMapper.state(status),

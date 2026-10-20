@@ -156,7 +156,9 @@ class CommandsTest {
     @Test
     fun climateTemperatureToneFallsBackToTheVerifiedClimateModeWhenNeeded() {
         assertEquals(ClimateTemperatureTone.COOLING, ClimateTemperatureToneResolver.tone(true, null, 1))
+        assertEquals(ClimateTemperatureTone.HEATING, ClimateTemperatureToneResolver.tone(true, null, 2))
         assertEquals(ClimateTemperatureTone.HEATING, ClimateTemperatureToneResolver.tone(true, null, 3))
+        assertEquals(ClimateTemperatureTone.VENTILATION, ClimateTemperatureToneResolver.tone(true, null, 0))
         assertEquals(ClimateTemperatureTone.VENTILATION, ClimateTemperatureToneResolver.tone(true, null, 4))
     }
 

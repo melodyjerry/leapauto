@@ -263,7 +263,6 @@ class MainActivity : ComponentActivity() {
     private var scheduledPreheatEnabled by mutableStateOf(false)
     private var scheduledPreheatStartTime by mutableStateOf("23:00")
     private var scheduledPreheatDays by mutableStateOf("1,1,1,1,1,1,1")
-    private var signalMapDebugState by mutableStateOf<VehicleSignalMapDebugState>(VehicleSignalMapDebugState.Idle)
     private var versionUpdateState by mutableStateOf<VersionUpdateState>(VersionUpdateState.Idle)
     private var vehicleOtaState by mutableStateOf<VehicleOtaState>(VehicleOtaState.Idle)
     private var showPowerTypeDialog by mutableStateOf(false)
@@ -1093,7 +1092,6 @@ class MainActivity : ComponentActivity() {
             sessionStore.updateWidgetLockState(session.selectedVin, locked = isLock)
             com.leapauto.app.tiles.TilePromptHelper.requestTilesUpdate(this@MainActivity)
             ControlWidget.refreshData(this@MainActivity)
-            CompactControlWidget.refreshData(this@MainActivity)
         }
 
         // 1.2s ➔ 1.5s ➔ 2.0s ➔ 2.5s 阶梯轮询，实车信号达成即刻早退闭环
@@ -1502,7 +1500,6 @@ class MainActivity : ComponentActivity() {
         climateStatusRevision += 1L
         showAuthorSupportDialog = false
         showSessionExpiredDialog = false
-        signalMapDebugState = VehicleSignalMapDebugState.Idle
         loggedIn = false
         versionUpdateState = VersionUpdateState.Idle
         vehicleOtaState = VehicleOtaState.Idle
@@ -2469,7 +2466,6 @@ class MainActivity : ComponentActivity() {
                 )
                 ControlWidget.updateSyncCadence(this@MainActivity, parsed.isDriving)
                 ControlWidget.refreshData(this@MainActivity)
-                CompactControlWidget.refreshData(this@MainActivity)
                 runOnMain(generation) {
                     // Replace the activity-only snapshot only when this refresh yields a valid position.
                     vehicleLocationSnapshot = locationSnapshot
@@ -2850,7 +2846,6 @@ class MainActivity : ComponentActivity() {
                     toast("爱车主图已更新")
                 }
                 ControlWidget.refreshData(this@MainActivity)
-                CompactControlWidget.refreshData(this@MainActivity)
             } catch (e: Exception) {
                 Log.e("LeapVehiclePic", "处理自定义车图失败", e)
                 runOnUiThread {
@@ -2866,16 +2861,16 @@ class MainActivity : ComponentActivity() {
         VehicleImageCache.removeCustomImage(this, vin)
         vehicleImageVersion++
         toast("已恢复默认官方车模")
-        ControlWidget.refreshData(this)
-        CompactControlWidget.refreshData(this)
         worker.execute {
-            val api = LeapmotorApi(session)
-            val updated = VehicleImageCache.sync(this@MainActivity, api, vin)
-            if (updated) {
-                runOnUiThread {
-                    vehicleImageVersion++
+            ControlWidget.refreshData(this@MainActivity)
+            val api = runCatching { LeapmotorApi(session) }.getOrNull()
+            if (api != null) {
+                val updated = VehicleImageCache.sync(this@MainActivity, api, vin)
+                if (updated) {
+                    runOnUiThread {
+                        vehicleImageVersion++
+                    }
                     ControlWidget.refreshData(this@MainActivity)
-                    CompactControlWidget.refreshData(this@MainActivity)
                 }
             }
         }
@@ -2941,38 +2936,6 @@ class MainActivity : ComponentActivity() {
         syncChargePlanFromServer(target.vin, force = true)
         checkAndPromptPowerType(target.vin)
         toast("已切换至 ${target.nickname.ifBlank { target.carType }}")
-    }
-
-    /** Reads raw signalMap data only after the user opens the diagnostics page. */
-    private fun refreshSignalMapDebug() {
-        if (!loggedIn || session.selectedVin.isBlank()) return
-        if (signalMapDebugState is VehicleSignalMapDebugState.Loading) return
-        signalMapDebugState = VehicleSignalMapDebugState.Loading
-        val generation = operationGeneration
-        worker.execute {
-            try {
-                val signalMap = LeapmotorApi(session).getVehicleSignalMap()
-                val formatted = VehicleSignalMapDebugFormatter.format(signalMap)
-                runOnMain(generation) {
-                    signalMapDebugState = VehicleSignalMapDebugState.Success(
-                        formattedJson = formatted,
-                        signalCount = signalMap.length()
-                    )
-                }
-            } catch (_: Exception) {
-                runOnMain(generation) {
-                    signalMapDebugState = VehicleSignalMapDebugState.Failed("读取车型信号失败，请稍后重试")
-                }
-            }
-        }
-    }
-
-    /** Copying raw diagnostics is an explicit local user action. */
-    private fun copySignalMapDebug(formattedJson: String) {
-        if (formattedJson.isBlank()) return
-        val clipboard = getSystemService(ClipboardManager::class.java) ?: return
-        clipboard.setPrimaryClip(ClipData.newPlainText("signalMap", formattedJson))
-        toast("已复制车型信号")
     }
 
     /**
@@ -3519,15 +3482,6 @@ class MainActivity : ComponentActivity() {
         return true
     }
 
-    private fun climateConfirmedFeedback(
-        label: String,
-        expectation: ClimateTelemetryExpectation?
-    ): String = if (expectation?.hasUnavailableFields == true) {
-        ClimateControlFeedbackText.confirmedAvailableFields(label)
-    } else {
-        ClimateControlFeedbackText.confirmed(label)
-    }
-
     private fun normalizedDetailedClimateValue(value: String?): Int? = value
         ?.trim()
         ?.replace(Regex("\\s*°?\\s*C\\s*$", RegexOption.IGNORE_CASE), "")
@@ -4065,7 +4019,6 @@ class MainActivity : ComponentActivity() {
                     sessionStore.updateWidgetLockState(session.selectedVin, locked = true)
                     com.leapauto.app.tiles.TilePromptHelper.requestTilesUpdate(this@MainActivity)
                     ControlWidget.refreshData(this@MainActivity)
-                    CompactControlWidget.refreshData(this@MainActivity)
                 }
             }
             "unlock" -> {
@@ -4076,7 +4029,6 @@ class MainActivity : ComponentActivity() {
                     sessionStore.updateWidgetLockState(session.selectedVin, locked = false)
                     com.leapauto.app.tiles.TilePromptHelper.requestTilesUpdate(this@MainActivity)
                     ControlWidget.refreshData(this@MainActivity)
-                    CompactControlWidget.refreshData(this@MainActivity)
                 }
             }
             "trunkOpen" -> {
@@ -4085,7 +4037,6 @@ class MainActivity : ComponentActivity() {
                     optimisticTrunkState = TrunkState.OPEN
                     status = status?.copy(trunkState = TrunkState.OPEN)
                     ControlWidget.refreshData(this@MainActivity)
-                    CompactControlWidget.refreshData(this@MainActivity)
                 }
             }
             "trunkClose" -> {
@@ -4094,7 +4045,6 @@ class MainActivity : ComponentActivity() {
                     optimisticTrunkState = TrunkState.CLOSED
                     status = status?.copy(trunkState = TrunkState.CLOSED)
                     ControlWidget.refreshData(this@MainActivity)
-                    CompactControlWidget.refreshData(this@MainActivity)
                 }
             }
             "frunkOpen" -> {
@@ -4103,7 +4053,6 @@ class MainActivity : ComponentActivity() {
                     optimisticHoodOpen = true
                     status = status?.copy(hoodOpen = true)
                     ControlWidget.refreshData(this@MainActivity)
-                    CompactControlWidget.refreshData(this@MainActivity)
                 }
             }
             "frunkClose" -> {
@@ -4112,7 +4061,6 @@ class MainActivity : ComponentActivity() {
                     optimisticHoodOpen = false
                     status = status?.copy(hoodOpen = false)
                     ControlWidget.refreshData(this@MainActivity)
-                    CompactControlWidget.refreshData(this@MainActivity)
                 }
             }
             "windowVent" -> {
@@ -4128,7 +4076,6 @@ class MainActivity : ComponentActivity() {
                         openWindows = listOf("左前", "右前", "左后", "右后")
                     )
                     ControlWidget.refreshData(this@MainActivity)
-                    CompactControlWidget.refreshData(this@MainActivity)
                 }
             }
             "windowOpen" -> {
@@ -4144,7 +4091,6 @@ class MainActivity : ComponentActivity() {
                         openWindows = listOf("左前", "右前", "左后", "右后")
                     )
                     ControlWidget.refreshData(this@MainActivity)
-                    CompactControlWidget.refreshData(this@MainActivity)
                 }
             }
             "windowClose" -> {
@@ -4160,7 +4106,6 @@ class MainActivity : ComponentActivity() {
                         openWindows = emptyList()
                     )
                     ControlWidget.refreshData(this@MainActivity)
-                    CompactControlWidget.refreshData(this@MainActivity)
                 }
             }
             "sunroofOpen" -> {
@@ -4172,7 +4117,6 @@ class MainActivity : ComponentActivity() {
                         sunroofOpeningPercent = 100
                     )
                     ControlWidget.refreshData(this@MainActivity)
-                    CompactControlWidget.refreshData(this@MainActivity)
                 }
             }
             "sunroofClose" -> {
@@ -4184,7 +4128,6 @@ class MainActivity : ComponentActivity() {
                         sunroofOpeningPercent = 0
                     )
                     ControlWidget.refreshData(this@MainActivity)
-                    CompactControlWidget.refreshData(this@MainActivity)
                 }
             }
             else -> {

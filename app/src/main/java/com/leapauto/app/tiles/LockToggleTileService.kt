@@ -35,7 +35,8 @@ class LockToggleTileService : TileService() {
 
     override fun onStartListening() {
         super.onStartListening()
-        updateTileState(inProgress = false)
+        val inFlight = ControlService.isCommandInFlight()
+        updateTileState(inProgress = inFlight, customSubtitle = if (inFlight) "指令执行中..." else null)
         val snapshot = SessionStore(applicationContext).loadSelectedWidgetSnapshot()
         if (snapshot == null || System.currentTimeMillis() - snapshot.lastSuccessAt > 60_000L) {
             com.leapauto.app.ControlWidget.enqueueSync(applicationContext)
@@ -62,11 +63,17 @@ class LockToggleTileService : TileService() {
             return
         }
 
+        if (ControlService.isCommandInFlight()) {
+            android.widget.Toast.makeText(context, "已有控车指令执行中，请稍候", android.widget.Toast.LENGTH_SHORT).show()
+            updateTileState(inProgress = true, customSubtitle = "指令执行中...")
+            return
+        }
+
         val snapshot = store.loadSelectedWidgetSnapshot()
         // 智能车锁状态判定：快照有值以快照为准；快照无值时参考 Tile 自身激活态 (已激活代表已解锁，需触发上锁)
-        val isLocked = snapshot?.locked ?: (qsTile?.state != Tile.STATE_ACTIVE)
+        val isCarLocked = snapshot?.locked ?: (qsTile?.state != Tile.STATE_ACTIVE)
 
-        if (isLocked) {
+        if (isCarLocked) {
             // 已上锁状态 -> 点击执行解锁
             if (isLockedState()) {
                 unlockAndRun {
@@ -110,9 +117,12 @@ class LockToggleTileService : TileService() {
             Log.e(TAG, "启动门锁服务异常: ${e.message}")
         }
 
+        mainHandler.removeCallbacksAndMessages(null)
         mainHandler.postDelayed({
-            updateTileState(inProgress = false, forceTargetLock = targetLockState)
-        }, 1500L)
+            if (!ControlService.isCommandInFlight()) {
+                updateTileState(inProgress = false, forceTargetLock = targetLockState)
+            }
+        }, 10_000L)
     }
 
     private fun updateTileState(
@@ -122,7 +132,7 @@ class LockToggleTileService : TileService() {
     ) {
         val tile = qsTile ?: return
         val snapshot = SessionStore(applicationContext).loadSelectedWidgetSnapshot()
-        val isLocked = forceTargetLock ?: snapshot?.locked ?: (tile.state != Tile.STATE_ACTIVE)
+        val isCarLocked = forceTargetLock ?: snapshot?.locked ?: (tile.state != Tile.STATE_ACTIVE)
 
         if (inProgress) {
             tile.state = Tile.STATE_ACTIVE
@@ -130,9 +140,9 @@ class LockToggleTileService : TileService() {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 tile.subtitle = customSubtitle ?: "正在发送..."
             }
-            tile.icon = Icon.createWithResource(this, if (isLocked) R.drawable.ic_phosphor_lock else R.drawable.ic_phosphor_lock_open)
+            tile.icon = Icon.createWithResource(this, if (isCarLocked) R.drawable.ic_phosphor_lock else R.drawable.ic_phosphor_lock_open)
         } else {
-            if (isLocked) {
+            if (isCarLocked) {
                 tile.state = Tile.STATE_INACTIVE
                 tile.label = "车锁"
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
