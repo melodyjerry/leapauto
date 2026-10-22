@@ -998,6 +998,7 @@ fun LeapAutoScreen(
                                 onWidgetOpacityChange = onWidgetOpacityChange,
                                 selectedThemeId = selectedThemeId,
                                 onSelectedThemeChange = onSelectedThemeChange,
+                                onNavigateToHome = { selectedTab = MainNavigationTabs.VEHICLE },
                                 appearanceMode = appearanceMode,
                                 onAppearanceModeChange = onAppearanceModeChange,
                                 vehicleModel = vehicleModel,
@@ -1609,6 +1610,7 @@ private fun MyContent(
     onPowerTypeChange: (SessionStore.VehiclePowerType) -> Unit = {},
     selectedThemeId: String = ThemeManager.DEFAULT_THEME_ID,
     onSelectedThemeChange: (String) -> Unit = {},
+    onNavigateToHome: () -> Unit = {},
     onOpenAuthorSupport: () -> Unit = {},
     onLogout: () -> Unit = {}
 ) {
@@ -1857,8 +1859,8 @@ private fun MyContent(
             onDismiss = { showProfileThemeDialog = false },
             onThemeApplied = { newThemeId ->
                 onSelectedThemeChange(newThemeId)
-                showProfileThemeDialog = false
-            }
+            },
+            onNavigateToHome = onNavigateToHome
         )
     }
 
@@ -4196,8 +4198,9 @@ fun VehicleHero(
     }
     val h5Key = cachedMeta?.h5Key
     val srcKey = cachedMeta?.srcKey
+    val is3dSupported = ThemeManager.isVehicle3DSupported(context, vehicleVin)
     var is3DReady by remember(h5Key, srcKey) {
-        mutableStateOf(h5Key != null && CarModel3DManager.isModelReady(context, h5Key, srcKey))
+        mutableStateOf(is3dSupported && h5Key != null && CarModel3DManager.isModelReady(context, h5Key, srcKey))
     }
     var is3DRendered by remember(h5Key, srcKey) { mutableStateOf(false) }
     var is3DLoadFailed by remember(h5Key, srcKey) { mutableStateOf(false) }
@@ -4228,7 +4231,7 @@ fun VehicleHero(
     val isDrivingGear = gear in setOf("D", "D挡", "DRIVE", "前进", "3", "R", "R挡", "REVERSE", "倒车", "1")
     val speedValue = status?.speed?.replace("km/h", "", ignoreCase = true)?.trim()?.toFloatOrNull() ?: 0f
     val isActuallyDriving = if (isDrivingGear && speedValue <= 0f) false else (isDrivingGear || status?.isDriving == true || speedValue > 0f)
-    val show3D = !hasCustomImage && !prefer2DModel && is3DReady && h5Key != null && !is3DLoadFailed && !is3DTimedOut
+    val show3D = is3dSupported && !hasCustomImage && !prefer2DModel && is3DReady && h5Key != null && !is3DLoadFailed && !is3DTimedOut
     val modelAlpha by androidx.compose.animation.core.animateFloatAsState(
         targetValue = if (is3DRendered) 1f else 0f,
         animationSpec = androidx.compose.animation.core.tween(durationMillis = 350),
@@ -4236,21 +4239,21 @@ fun VehicleHero(
     )
 
     // 1. 资产就绪自动监听：平稳监听后台 3D 模型下载与解压进度，一旦本地就绪立刻激活 3D 渲染，绝不盲目超时
-    androidx.compose.runtime.LaunchedEffect(h5Key, srcKey, vehicleImageVersion) {
-        if (h5Key != null && !is3DReady) {
+    androidx.compose.runtime.LaunchedEffect(h5Key, srcKey, vehicleImageVersion, is3dSupported) {
+        if (is3dSupported && h5Key != null && !is3DReady) {
             while (!is3DReady) {
                 if (CarModel3DManager.isModelReady(context, h5Key, srcKey)) {
                     is3DReady = true
                     break
                 }
-                kotlinx.coroutines.delay(400)
+                kotlinx.coroutines.delay(500)
             }
         }
     }
 
-    // 2. 独立 WebGL 渲染超时倒计时：仅在本地三维资产完全解压就绪、WebView 挂载渲染后才启动计时
-    androidx.compose.runtime.LaunchedEffect(is3DReady, h5Key, is3DLoadFailed, prefer2DModel) {
-        if (is3DReady && h5Key != null && !hasCustomImage && !prefer2DModel && !is3DRendered && !is3DLoadFailed) {
+    // 2. 超时保护机制：模型资产就绪后发起真实渲染，若 12 秒内仍未收到首帧/全车回调且未失败，自动超时降级
+    androidx.compose.runtime.LaunchedEffect(is3DReady, h5Key, is3DLoadFailed, prefer2DModel, is3dSupported) {
+        if (is3dSupported && is3DReady && h5Key != null && !hasCustomImage && !prefer2DModel && !is3DRendered && !is3DLoadFailed) {
             is3DTimedOut = false
             val completed = kotlinx.coroutines.withTimeoutOrNull(15_000L) {
                 while (!is3DRendered && !is3DLoadFailed) {
@@ -4295,14 +4298,14 @@ fun VehicleHero(
     val pageBg = MaterialTheme.colorScheme.background
     val heroCardShape = RoundedCornerShape(16.dp)
 
-    var activeThemeBgBitmap by remember(selectedThemeId, vehicleImageVersion) {
-        val bmp = ThemeManager.load3dBgBitmap(context, selectedThemeId)
-        android.util.Log.i("ThemeDebug", "HomeContent remember: themeId=$selectedThemeId, version=$vehicleImageVersion, bmp=${bmp != null}")
+    var activeThemeBgBitmap by remember(selectedThemeId, vehicleImageVersion, is3dSupported) {
+        val bmp = ThemeManager.load3dBgBitmap(context, selectedThemeId, vehicleVin)
+        android.util.Log.i("ThemeDebug", "HomeContent remember: themeId=$selectedThemeId, version=$vehicleImageVersion, is3dSupported=$is3dSupported, bmp=${bmp != null}")
         mutableStateOf(bmp)
     }
     // 首卡底色判定：有实景大图/3D 天幕时按主题固有色调；否则为程序化 2D 微晶渐变，跟随系统深浅，
     // 避免老款 2D 车型在深色模式下的深色文字与暗底撞色看不清
-    val hasThemeBg = activeThemeBgBitmap != null && selectedThemeId != ThemeManager.ORIGINAL_SKYBOX_THEME_ID
+    val hasThemeBg = activeThemeBgBitmap != null && (!is3dSupported || selectedThemeId != ThemeManager.ORIGINAL_SKYBOX_THEME_ID)
     val isHeroDark = when {
         hasThemeBg -> ThemeManager.isHeroBackgroundDark(selectedThemeId, isDark)
         show3D -> ThemeManager.isHeroBackgroundDark(selectedThemeId, isDark)
@@ -4315,9 +4318,9 @@ fun VehicleHero(
     val pillContentColor = if (isHeroDark) Color.White else Color(0xFF141923)
 
     // 默认主题/自选主题自愈检测：若本地高清背景尚未就绪，异步静默下载并即时上屏
-    androidx.compose.runtime.LaunchedEffect(selectedThemeId, vehicleVin) {
+    androidx.compose.runtime.LaunchedEffect(selectedThemeId, vehicleVin, is3dSupported) {
         android.util.Log.i("ThemeDebug", "HomeContent LaunchedEffect: themeId=$selectedThemeId, vin=$vehicleVin, activeBmp=${activeThemeBgBitmap != null}")
-        if (selectedThemeId != ThemeManager.ORIGINAL_SKYBOX_THEME_ID && activeThemeBgBitmap == null) {
+        if (is3dSupported && selectedThemeId != ThemeManager.ORIGINAL_SKYBOX_THEME_ID && activeThemeBgBitmap == null) {
             kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                 val themeObj = ThemeManager.loadCachedThemeList(context).find { it.themeId == selectedThemeId }
                     ?: ThemeManager.PRESET_THEMES.find { it.themeId == selectedThemeId }
@@ -4968,11 +4971,11 @@ fun VehicleHero(
                             .offset(y = (-4).dp)
                             .clickable(onClick = onOpenHealthCheck)
                     } else {
-                        // 官方 2D 车图：精确对齐官方 3D 车模尺寸(285dp)与重心高度(-16dp)
+                        // 官方 2D 车图：精确对齐官方 2:1 黄金比例与屏幕动态自适应
                         Modifier
-                            .width(285.dp)
-                            .height(142.dp)
-                            .offset(y = (-16).dp)
+                            .fillMaxWidth(0.82f)
+                            .aspectRatio(2.0f)
+                            .offset(y = (-10).dp)
                             .clickable(onClick = onOpenHealthCheck)
                     }
                     Image(
@@ -4993,7 +4996,7 @@ fun VehicleHero(
                         }
                     }
                     // 若当前处于 2D 视图且支持 3D，提供随时轻触切回 3D 的快捷入口
-                    if ((prefer2DModel || is3DTimedOut || is3DLoadFailed) && h5Key != null && !hasCustomImage) {
+                    if (is3dSupported && (prefer2DModel || is3DTimedOut || is3DLoadFailed) && h5Key != null && !hasCustomImage) {
                         Surface(
                             modifier = Modifier
                                 .align(Alignment.TopEnd)
@@ -5045,9 +5048,9 @@ fun VehicleHero(
                             contentDescription = "车身展示底图",
                             contentScale = ContentScale.Fit,
                             modifier = Modifier
-                                .width(285.dp)
-                                .height(142.dp)
-                                .offset(y = (-16).dp)
+                                .fillMaxWidth(0.82f)
+                                .aspectRatio(2.0f)
+                                .offset(y = (-10).dp)
                                 .graphicsLayer { alpha = 0.60f }
                         )
                     }
@@ -5063,7 +5066,7 @@ fun VehicleHero(
                         }
                     }
                     // 当 3D 尚未渲染完成时展示轻量加载提示
-                    if (!is3DRendered && h5Key != null && !hasCustomImage && !prefer2DModel && !is3DLoadFailed && !is3DTimedOut) {
+                    if (is3dSupported && !is3DRendered && h5Key != null && !hasCustomImage && !prefer2DModel && !is3DLoadFailed && !is3DTimedOut) {
                         Surface(
                             shape = RoundedCornerShape(16.dp),
                             color = if (isDark) Color(0xFF131722).copy(alpha = 0.70f) else Color.White.copy(alpha = 0.75f),
@@ -6105,6 +6108,8 @@ private fun QuickVehicleActions(
     var sunroofButtonTopLeft by remember { mutableStateOf(Offset.Zero) }
     var sunroofButtonWidth by remember { mutableStateOf(0f) }
     var sunroofButtonHeight by remember { mutableStateOf(0f) }
+    var batteryPreheatWarningMessage by rememberSaveable { mutableStateOf<String?>(null) }
+    var showForceBatteryPreheatButton by rememberSaveable { mutableStateOf(false) }
     val trunkState = status?.trunkState ?: TrunkState.UNKNOWN
     val isDrivingGear = VehicleDrivingSafetyPolicy.isDrivingGear(status?.gearStatus)
     val commandsPerPage = 5
@@ -6139,6 +6144,7 @@ private fun QuickVehicleActions(
             Cmd("trunk", "开后备箱", R.drawable.ic_phosphor_trunk_open),
             *frunkCommands.toTypedArray(),
             *extraCommands.toTypedArray(),
+            Cmd("batteryPreheat", "电池预热", R.drawable.ic_phosphor_battery_charging),
             Cmd("sentry", "哨兵模式", R.drawable.ic_sentry),
             Cmd("diagnostics", "诊断", R.drawable.ic_quick_diagnostics)
         )
@@ -6422,6 +6428,47 @@ private fun QuickVehicleActions(
                                     WindowBadge(modifier = Modifier.align(Alignment.TopEnd))
                                 }
                             }
+                        } else if (command.name == "batteryPreheat") {
+                            val isPreheating = status?.batteryPreheatEnabled == true
+                            val preheatLabel = if (isPreheating) "预热中" else "电池预热"
+                            val preheatActiveColor = Color(0xFFFF9500)
+                            QuickVehicleButton(
+                                label = preheatLabel,
+                                iconRes = command.iconRes,
+                                warning = isPreheating,
+                                inProgress = activeControlCommand == "batteryPreheat" || activeControlCommand == "batteryPreheatOff",
+                                isSensitive = false,
+                                isHeroDark = isHeroDark,
+                                iconTint = if (isPreheating) preheatActiveColor else normalActionContentColor,
+                                labelTint = if (isPreheating) preheatActiveColor else normalActionLabelColor,
+                                onClick = {
+                                    handleQuickActionClick {
+                                        if (!editing) {
+                                            if (isPreheating) {
+                                                onControl("batteryPreheatOff")
+                                            } else {
+                                                val minTempNumber = status?.minBatteryTemp
+                                                    ?.replace("°C", "", ignoreCase = true)
+                                                    ?.trim()
+                                                    ?.toDoubleOrNull()
+                                                val rawSoc = status?.soc?.trim()?.toIntOrNull()
+                                                val isChargingOrPlugged = status?.chargeState == 1 || status?.chargeGunConnected == true
+
+                                                if (minTempNumber != null && minTempNumber > 10.0) {
+                                                    batteryPreheatWarningMessage = "当前动力电池最低温度为 ${status?.minBatteryTemp}（处于适宜工作温区）。\n\n受零跑车端 BMS 固件保护机制，仅在电芯温度低于 10℃ 时车端方可开启电池加热回路。"
+                                                    showForceBatteryPreheatButton = true
+                                                } else if (!isChargingOrPlugged && rawSoc != null && rawSoc < 20) {
+                                                    batteryPreheatWarningMessage = "当前动力电池剩余电量为 $rawSoc%（低于 20%）。\n\n为保护高压动力电池防止过放亏电，车辆未连接充电桩时限制开启电池预热。"
+                                                    showForceBatteryPreheatButton = false
+                                                } else {
+                                                    onControl("batteryPreheat")
+                                                }
+                                            }
+                                        }
+                                    }
+                                },
+                                modifier = Modifier.weight(1f)
+                            )
                         } else {
                             val isWarningCmd = when (command.name) {
                                 "unlock" -> status?.locked == false
@@ -6776,6 +6823,79 @@ private fun QuickVehicleActions(
         )
     }
 
+    if (batteryPreheatWarningMessage != null) {
+        AlertDialog(
+            onDismissRequest = {
+                batteryPreheatWarningMessage = null
+                showForceBatteryPreheatButton = false
+            },
+            modifier = solidDialogModifier(),
+            containerColor = MaterialTheme.colorScheme.surface,
+            tonalElevation = 0.dp,
+            shape = RoundedCornerShape(24.dp),
+            title = {
+                Text(
+                    text = "电池预热提示",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            },
+            text = {
+                Text(
+                    text = batteryPreheatWarningMessage.orEmpty(),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    lineHeight = 20.sp
+                )
+            },
+            confirmButton = {
+                if (showForceBatteryPreheatButton) {
+                    TextButton(
+                        onClick = {
+                            batteryPreheatWarningMessage = null
+                            showForceBatteryPreheatButton = false
+                            onControl("batteryPreheat")
+                        }
+                    ) {
+                        Text(
+                            "仍然尝试发送",
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                } else {
+                    TextButton(
+                        onClick = {
+                            batteryPreheatWarningMessage = null
+                            showForceBatteryPreheatButton = false
+                        }
+                    ) {
+                        Text(
+                            "我知道了",
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            },
+            dismissButton = {
+                if (showForceBatteryPreheatButton) {
+                    TextButton(
+                        onClick = {
+                            batteryPreheatWarningMessage = null
+                            showForceBatteryPreheatButton = false
+                        }
+                    ) {
+                        Text(
+                            "取消",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        )
+    }
 }
 
 @OptIn(ExperimentalFoundationApi::class)

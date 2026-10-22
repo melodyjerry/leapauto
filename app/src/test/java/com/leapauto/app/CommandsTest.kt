@@ -775,4 +775,34 @@ class CommandsTest {
         assertEquals("440", Commands.build("rearviewMirrorHeating_on").cmdid)
         assertEquals("440", Commands.build("rearviewMirrorHeating_off").cmdid)
     }
+
+    @Test
+    fun batteryPreheatAndBatteryPreheatOffCommandsAndFeedback() {
+        val onCmd = Commands.build("batteryPreheat")
+        assertEquals("160", onCmd.cmdid)
+        assertEquals("{\"value\":\"ptcon\"}", onCmd.stateJson)
+        assertEquals("电池预热开", onCmd.label)
+        assertEquals("开启电池预热中...", ControlFeedbackFormatter.inProgress("batteryPreheat", onCmd.label))
+        assertEquals("电池预热已开启", ControlFeedbackFormatter.success("batteryPreheat", onCmd.label))
+
+        val offCmd = Commands.build("batteryPreheatOff")
+        assertEquals("160", offCmd.cmdid)
+        assertEquals("{\"value\":\"ptcoff\"}", offCmd.stateJson)
+        assertEquals("电池预热关", offCmd.label)
+        assertEquals("正在关闭电池预热...", ControlFeedbackFormatter.inProgress("batteryPreheatOff", offCmd.label))
+        assertEquals("电池预热已关闭", ControlFeedbackFormatter.success("batteryPreheatOff", offCmd.label))
+    }
+
+    @Test
+    fun quickVehicleActionsIncludesBatteryPreheatButton() {
+        val workingDirectory = requireNotNull(System.getProperty("user.dir"))
+        val projectDir = generateSequence(java.io.File(workingDirectory)) { it.parentFile }
+            .first { java.io.File(it, "app").isDirectory }
+        val screenSource = java.io.File(projectDir, "app/src/main/java/com/leapauto/app/ui/LeapAutoScreen.kt").readText()
+
+        assertTrue("availableCommands must include batteryPreheat", screenSource.contains("Cmd(\"batteryPreheat\", \"电池预热\""))
+        assertTrue("QuickVehicleActions must handle batteryPreheat button", screenSource.contains("command.name == \"batteryPreheat\""))
+        assertTrue("Must check 10C threshold", screenSource.contains("minTempNumber > 10.0"))
+        assertTrue("Must check SOC 20 threshold", screenSource.contains("rawSoc < 20"))
+    }
 }

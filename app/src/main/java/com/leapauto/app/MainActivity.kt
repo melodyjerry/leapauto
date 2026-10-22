@@ -382,7 +382,11 @@ class MainActivity : ComponentActivity() {
         widgetBackgroundStyle = sessionStore.loadWidgetBackgroundStyle()
         widgetOpacity = sessionStore.loadWidgetOpacity()
         ThemeManager.cleanInvalidBlurredCache(this)
+        ThemeManager.isVehicle3DSupported(this, session.selectedVin)
         selectedThemeId = ThemeManager.getActiveThemeId(this, session.selectedVin)
+        worker.execute {
+            VehicleImageCache.loadCachedBitmap(this@MainActivity, session.selectedVin)
+        }
         if (selectedThemeId != ThemeManager.ORIGINAL_SKYBOX_THEME_ID) {
             if (!ThemeManager.isThemeReady(this, selectedThemeId)) {
                 worker.execute {
@@ -2907,6 +2911,7 @@ class MainActivity : ComponentActivity() {
         scheduledPreheatEnabled = sessionStore.loadScheduledPreheatEnabled(target.vin)
         scheduledPreheatStartTime = sessionStore.loadScheduledPreheatStartTime(target.vin)
         scheduledPreheatDays = sessionStore.loadScheduledPreheatDays(target.vin)
+        ThemeManager.isVehicle3DSupported(this, target.vin)
         selectedThemeId = ThemeManager.getActiveThemeId(this, target.vin)
 
         status = null

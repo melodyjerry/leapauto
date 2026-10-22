@@ -508,6 +508,7 @@ object ControlFeedbackFormatter {
             key == "sentryOff" -> "关闭哨兵模式中..."
             key == "sentry" || key == "哨兵模式" -> "切换哨兵模式中..."
             key == "batteryPreheat" || key == "电池预热" -> "开启电池预热中..."
+            key == "batteryPreheatOff" || key == "关闭电池预热" -> "正在关闭电池预热..."
             key == "horn" || key == "鸣笛" || key == "鸣笛寻车" -> "鸣笛寻车中..."
             key == "fridgeOn" || key == "开启冰箱" -> {
                 if (lbl.contains("制热") || lbl.contains("50°C")) "正在开启车载冰箱保温..."
@@ -577,6 +578,7 @@ object ControlFeedbackFormatter {
             key.startsWith("fotaSchedule") -> "定时升级已预约成功"
             key == "sentry" || key == "哨兵模式" -> "哨兵模式设置成功"
             key == "batteryPreheat" || key == "电池预热" -> "电池预热已开启"
+            key == "batteryPreheatOff" || key == "关闭电池预热" -> "电池预热已关闭"
             key == "horn" || key == "鸣笛" || key == "鸣笛寻车" -> "鸣笛寻车已完成"
             key == "fridgeOn" || key == "开启冰箱" -> {
                 if (lbl.contains("制热") || lbl.contains("50°C")) {

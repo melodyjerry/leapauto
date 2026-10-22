@@ -868,11 +868,12 @@ class ControlWidget : AppWidgetProvider() {
         }
 
         internal fun widgetEffectiveDarkTheme(context: Context, activeThemeId: String = ""): Boolean {
+            val store = SessionStore(context)
+            val vin = store.load().selectedVin
             val resolvedThemeId = if (activeThemeId.isNotBlank()) activeThemeId else {
-                val vin = SessionStore(context).load().selectedVin
                 ThemeManager.getActiveThemeId(context, vin)
             }
-            return when (ThemeManager.getThemeTone(resolvedThemeId)) {
+            return when (ThemeManager.getThemeTone(resolvedThemeId, context, vin)) {
                 ThemeManager.ThemeTone.LIGHT -> false // 高亮雪景等主题，强制浅底深色字
                 ThemeManager.ThemeTone.DARK -> true   // 暮色石筑等主题，强制深底纯白字
                 ThemeManager.ThemeTone.AUTO -> widgetUsesDarkAppearance(context)
@@ -939,8 +940,9 @@ class ControlWidget : AppWidgetProvider() {
             val session = store.load()
             val vin = session.selectedVin
             val activeThemeId = ThemeManager.getActiveThemeId(context, vin)
-            val themeBgBitmap = if (activeThemeId != ThemeManager.ORIGINAL_SKYBOX_THEME_ID) {
-                ThemeManager.loadWidgetBgBitmap(context, activeThemeId, is4x2 = true, darkTheme = darkTheme)
+            val is3dSupported = ThemeManager.isVehicle3DSupported(context, vin)
+            val themeBgBitmap = if (!is3dSupported || activeThemeId != ThemeManager.ORIGINAL_SKYBOX_THEME_ID) {
+                ThemeManager.loadWidgetBgBitmap(context, activeThemeId, is4x2 = true, darkTheme = darkTheme, vin = vin)
             } else null
 
             if (themeBgBitmap != null) {

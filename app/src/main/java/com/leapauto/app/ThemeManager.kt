@@ -13,6 +13,100 @@ object ThemeManager {
     const val ORIGINAL_SKYBOX_THEME_ID = "4"
     const val DEFAULT_THEME_ID = "7"
 
+    /** 全局变量：当前车型是否支持 3D 车模及个性化主题 */
+    @Volatile
+    var isCurrentVehicle3DSupported: Boolean = true
+
+    private const val PREFS_3D_SUPPORT = "vehicle_3d_support"
+    private const val KEY_3D_SUPPORTED_PREFIX = "supported_"
+
+    /**
+     * 标记指定车辆是否支持 3D 车模。
+     * 当发现某个车型不支持时，设置 supported = false；同时更新全局变量与持久化存储。
+     */
+    fun setVehicle3DSupported(context: Context?, vin: String?, supported: Boolean) {
+        isCurrentVehicle3DSupported = supported
+        if (context != null && !vin.isNullOrBlank()) {
+            context.getSharedPreferences(PREFS_3D_SUPPORT, Context.MODE_PRIVATE)
+                .edit()
+                .putBoolean("$KEY_3D_SUPPORTED_PREFIX$vin", supported)
+                .apply()
+        }
+    }
+
+    /**
+     * 查询指定车辆是否支持 3D 车模。
+     * 优先读取持久化配置；若未配置过，则结合缓存元数据与已知车型判定。
+     */
+    fun isVehicle3DSupported(context: Context?, vin: String?): Boolean {
+        if (context != null && !vin.isNullOrBlank()) {
+            val sp = context.getSharedPreferences(PREFS_3D_SUPPORT, Context.MODE_PRIVATE)
+            if (sp.contains("$KEY_3D_SUPPORTED_PREFIX$vin")) {
+                val stored = sp.getBoolean("$KEY_3D_SUPPORTED_PREFIX$vin", true)
+                isCurrentVehicle3DSupported = stored
+                return stored
+            }
+            val meta = VehicleImageCache.getCachedMeta(context, vin)
+            if (meta != null) {
+                val supported = !meta.h5Key.isNullOrBlank()
+                sp.edit().putBoolean("$KEY_3D_SUPPORTED_PREFIX$vin", supported).apply()
+                isCurrentVehicle3DSupported = supported
+                return supported
+            }
+            val carType = SessionStore(context).load().selectedCarType
+            if (carType.contains("T03", ignoreCase = true) || carType.contains("S01", ignoreCase = true)) {
+                sp.edit().putBoolean("$KEY_3D_SUPPORTED_PREFIX$vin", false).apply()
+                isCurrentVehicle3DSupported = false
+                return false
+            }
+        }
+        return isCurrentVehicle3DSupported
+    }
+
+    /**
+     * 加载内置兜底 3D 展台背景图 (lpcar_pic_3d_bg.webp)。
+     * 当 isCurrentVehicle3DSupported == false 时为主界面展台提供默认背景。
+     */
+    fun loadFallback3dBgBitmap(context: Context): Bitmap? {
+        return try {
+            context.assets.open("fallback_theme/lpcar_pic_3d_bg.webp").use { inputStream ->
+                val opts = BitmapFactory.Options().apply {
+                    inPreferredConfig = Bitmap.Config.ARGB_8888
+                    inPremultiplied = true
+                }
+                BitmapFactory.decodeStream(inputStream, null, opts)
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "加载内置兜底 3D 展台背景图失败", e)
+            null
+        }
+    }
+
+    /**
+     * 加载内置兜底小组件背景图。
+     * 当 isCurrentVehicle3DSupported == false 时，2x2 小组件加载 lpcar_pic_widget_2x2.webp，
+     * 4x2 小组件加载 lpcar_pic_widget_4x2.webp。
+     */
+    fun loadFallbackWidgetBgBitmap(context: Context, is4x2: Boolean, darkTheme: Boolean = false): Bitmap? {
+        val assetName = if (is4x2) "fallback_theme/lpcar_pic_widget_4x2.webp" else "fallback_theme/lpcar_pic_widget_2x2.webp"
+        return try {
+            val raw = context.assets.open(assetName).use { inputStream ->
+                BitmapFactory.decodeStream(inputStream)
+            } ?: return null
+            val refWidthDp = if (is4x2) 340f else 160f
+            val cornerRadius = (20f * (raw.width / refWidthDp)).coerceIn(24f, 80f)
+            val strokeColor = if (darkTheme) 0x4DFFFFFF.toInt() else 0x26000000
+            val rounded = createRoundedWidgetBitmap(raw, cornerRadius, strokeColor)
+            if (rounded !== raw) {
+                raw.recycle()
+            }
+            rounded
+        } catch (e: Exception) {
+            Log.w(TAG, "加载内置兜底小组件背景图失败: is4x2=$is4x2", e)
+            null
+        }
+    }
+
     // 官方 4 套预设主题内置兜底清单（弱网/离线即可呈现）
     val PRESET_THEMES: List<VehicleTheme> by lazy {
         listOf(
@@ -152,7 +246,11 @@ object ThemeManager {
         return findThemeFile(dir, "lpcar_pic_widget_2x2.png")
     }
 
-    fun load3dBgBitmap(context: Context, themeId: String): Bitmap? {
+    fun load3dBgBitmap(context: Context, themeId: String, vin: String? = null): Bitmap? {
+        val supported = if (!vin.isNullOrBlank()) isVehicle3DSupported(context, vin) else isCurrentVehicle3DSupported
+        if (!supported) {
+            return loadFallback3dBgBitmap(context)
+        }
         if (themeId == ORIGINAL_SKYBOX_THEME_ID || themeId.isBlank()) return null
         val file = get3dBgFile(context, themeId)
         if (file != null && file.exists() && file.length() > 0L) {
@@ -216,7 +314,15 @@ object ThemeManager {
         AUTO   // 默认主题（4），跟随系统原生深浅模式自适应
     }
 
-    fun getThemeTone(themeId: String): ThemeTone {
+    fun getThemeTone(themeId: String, context: Context? = null, vin: String? = null): ThemeTone {
+        val supported = if (context != null && !vin.isNullOrBlank()) {
+            isVehicle3DSupported(context, vin)
+        } else {
+            isCurrentVehicle3DSupported
+        }
+        if (!supported) {
+            return ThemeTone.LIGHT // 兜底素材为高亮雪山，强制使用浅底深色文字
+        }
         return when (themeId) {
             "7" -> ThemeTone.LIGHT // 雾川雪镜：雪山冰河高亮底
             "8" -> ThemeTone.LIGHT // 晴空广场：湛蓝天空留白高光底
@@ -226,8 +332,8 @@ object ThemeManager {
     }
 
     /** 判断在给定的主题与系统外观下，首卡展台是否为暗色背景（用于决定顶部数据区文字是偏白还是偏黑） */
-    fun isHeroBackgroundDark(themeId: String, isSystemDark: Boolean): Boolean {
-        return when (getThemeTone(themeId)) {
+    fun isHeroBackgroundDark(themeId: String, isSystemDark: Boolean, context: Context? = null, vin: String? = null): Boolean {
+        return when (getThemeTone(themeId, context, vin)) {
             ThemeTone.DARK -> true   // 余晖石筑：背景天生为深色暮色，无论系统深浅，展台皆为暗底
             ThemeTone.LIGHT -> false // 晴空/雪镜：背景天生为高亮白天，展台皆为亮底
             ThemeTone.AUTO -> isSystemDark // 默认主题：跟随系统深浅外观
@@ -235,8 +341,8 @@ object ThemeManager {
     }
 
     /** 是否需要在深色模式下为浅色高光主题（如晴空广场/雾川雪镜）施加微弱夜巡沉浸滤镜，避免夜晚强光刺眼 */
-    fun shouldApplyNightMoodFilter(themeId: String, isSystemDark: Boolean): Boolean {
-        return isSystemDark && getThemeTone(themeId) == ThemeTone.LIGHT
+    fun shouldApplyNightMoodFilter(themeId: String, isSystemDark: Boolean, context: Context? = null, vin: String? = null): Boolean {
+        return isSystemDark && getThemeTone(themeId, context, vin) == ThemeTone.LIGHT
     }
 
     /** 按照 20dp 标准座舱 R 角与微晶描边对位图进行平滑抗锯齿物理裁剪，杜绝尖角直角 */
@@ -264,7 +370,17 @@ object ThemeManager {
         return output
     }
 
-    fun loadWidgetBgBitmap(context: Context, themeId: String, is4x2: Boolean, darkTheme: Boolean = false): Bitmap? {
+    fun loadWidgetBgBitmap(
+        context: Context,
+        themeId: String,
+        is4x2: Boolean,
+        darkTheme: Boolean = false,
+        vin: String? = null
+    ): Bitmap? {
+        val supported = if (!vin.isNullOrBlank()) isVehicle3DSupported(context, vin) else isCurrentVehicle3DSupported
+        if (!supported) {
+            return loadFallbackWidgetBgBitmap(context, is4x2, darkTheme)
+        }
         val file = if (is4x2) getWidget4x2BgFile(context, themeId) else getWidget2x2BgFile(context, themeId)
         val targetFile = if (file != null && file.exists() && file.length() > 0L) {
             file

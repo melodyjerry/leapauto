@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -27,6 +28,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -63,7 +65,8 @@ fun ThemeSelectorBottomSheet(
     themes: List<VehicleTheme>,
     api: LeapmotorApi?,
     onDismiss: () -> Unit,
-    onThemeApplied: (String) -> Unit
+    onThemeApplied: (String) -> Unit,
+    onNavigateToHome: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val isDark = LocalAppDarkTheme.current
@@ -72,6 +75,7 @@ fun ThemeSelectorBottomSheet(
     var downloadingThemeId by remember { mutableStateOf<String?>(null) }
     var applyingThemeId by remember { mutableStateOf<String?>(null) }
     var activeThemeId by remember { mutableStateOf(currentThemeId) }
+    var showSwitchSuccessDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
@@ -174,7 +178,7 @@ fun ThemeSelectorBottomSheet(
                                         activeThemeId = theme.themeId
                                         onThemeApplied(theme.themeId)
                                         applyingThemeId = null
-                                        Toast.makeText(context, "已应用主题：$displayName", Toast.LENGTH_SHORT).show()
+                                        showSwitchSuccessDialog = true
                                     }
                                 } else {
                                     downloadingThemeId = theme.themeId
@@ -192,7 +196,7 @@ fun ThemeSelectorBottomSheet(
                                             activeThemeId = theme.themeId
                                             onThemeApplied(theme.themeId)
                                             applyingThemeId = null
-                                            Toast.makeText(context, "已应用主题：$displayName", Toast.LENGTH_SHORT).show()
+                                            showSwitchSuccessDialog = true
                                         } else {
                                             Toast.makeText(context, "主题包下载失败，请检查网络", Toast.LENGTH_SHORT).show()
                                         }
@@ -395,5 +399,57 @@ fun ThemeSelectorBottomSheet(
                 }
             }
         }
+    }
+
+    if (showSwitchSuccessDialog) {
+        AlertDialog(
+            onDismissRequest = { showSwitchSuccessDialog = false },
+            modifier = solidDialogModifier(),
+            containerColor = MaterialTheme.colorScheme.surface,
+            tonalElevation = 0.dp,
+            shape = RoundedCornerShape(24.dp),
+            title = {
+                Text(
+                    text = "切换成功",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            },
+            text = {
+                Text(
+                    text = "切换成功，是否返回主页查看？",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showSwitchSuccessDialog = false
+                        onDismiss()
+                        onNavigateToHome()
+                    }
+                ) {
+                    Text(
+                        "确定",
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showSwitchSuccessDialog = false
+                    }
+                ) {
+                    Text(
+                        "取消",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        )
     }
 }

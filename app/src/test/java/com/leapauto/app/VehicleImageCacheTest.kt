@@ -184,6 +184,27 @@ class VehicleImageCacheTest {
         )
     }
 
+    @Test
+    fun `stripGroundShadow is integrated in vehicle image cache lifecycle`() {
+        val projectDir = projectDirectory()
+        val cacheFile = java.io.File(projectDir, "app/src/main/java/com/leapauto/app/VehicleImageCache.kt").readText()
+
+        org.junit.Assert.assertTrue("VehicleImageCache must define stripGroundShadow", cacheFile.contains("fun stripGroundShadow(src: Bitmap): Bitmap"))
+        org.junit.Assert.assertTrue("sync must call stripGroundShadow", cacheFile.contains("val stripped = stripGroundShadow(decoded)"))
+        org.junit.Assert.assertTrue("loadCachedBitmap must call stripGroundShadow", cacheFile.contains("stripGroundShadow(raw)"))
+        org.junit.Assert.assertTrue("loadCachedBitmap must auto-upgrade disk cache", cacheFile.contains("shadowVersion < CURRENT_SHADOW_VERSION"))
+        org.junit.Assert.assertTrue("loadWidgetBitmap must call stripGroundShadow for official 2d", cacheFile.contains("val processed = if (source == WidgetImageSource.OFFICIAL_2D) stripGroundShadow(bitmap) else bitmap"))
+    }
+
+    @Test
+    fun `official 2d car image uses official 2 to 1 dynamic adaptive ratio`() {
+        val projectDir = projectDirectory()
+        val screenFile = java.io.File(projectDir, "app/src/main/java/com/leapauto/app/ui/LeapAutoScreen.kt").readText()
+
+        org.junit.Assert.assertTrue("2D car image must use fillMaxWidth(0.82f)", screenFile.contains(".fillMaxWidth(0.82f)"))
+        org.junit.Assert.assertTrue("2D car image must use aspectRatio(2.0f)", screenFile.contains(".aspectRatio(2.0f)"))
+    }
+
     private fun projectDirectory(): java.io.File {
         val workingDirectory = requireNotNull(System.getProperty("user.dir"))
         return generateSequence(java.io.File(workingDirectory)) { it.parentFile }

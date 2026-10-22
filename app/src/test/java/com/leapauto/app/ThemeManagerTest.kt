@@ -247,4 +247,90 @@ class ThemeManagerTest {
         val matches = "syncThemesAndEnsureActive\\(\\)".toRegex().findAll(mainActivitySource).count()
         assertTrue("syncThemesAndEnsureActive must be invoked across all session and vehicle lifecycle entry points", matches >= 4)
     }
+
+    @Test
+    fun `isCurrentVehicle3DSupported global variable and fallback tone routing`() {
+        try {
+            // 1. 默认为 true
+            ThemeManager.isCurrentVehicle3DSupported = true
+            assertTrue(ThemeManager.isCurrentVehicle3DSupported)
+            assertEquals(ThemeManager.ThemeTone.AUTO, ThemeManager.getThemeTone("4"))
+
+            // 2. 当某个车型不支持时，置为 false
+            ThemeManager.isCurrentVehicle3DSupported = false
+            assertFalse(ThemeManager.isCurrentVehicle3DSupported)
+
+            // 当为 false 时，无论原先传入何种 themeId，均强制回退为浅底 ThemeTone.LIGHT
+            assertEquals(ThemeManager.ThemeTone.LIGHT, ThemeManager.getThemeTone("4"))
+            assertEquals(ThemeManager.ThemeTone.LIGHT, ThemeManager.getThemeTone("5"))
+            assertEquals(ThemeManager.ThemeTone.LIGHT, ThemeManager.getThemeTone("7"))
+            assertEquals(ThemeManager.ThemeTone.LIGHT, ThemeManager.getThemeTone("8"))
+
+            // 展台底色判定也强制适配浅底，确保文字高对比度
+            assertFalse(ThemeManager.isHeroBackgroundDark("4", isSystemDark = true))
+            assertFalse(ThemeManager.isHeroBackgroundDark("4", isSystemDark = false))
+
+            // 3. 支持车型切回 true 时，恢复原有逻辑
+            ThemeManager.isCurrentVehicle3DSupported = true
+            assertTrue(ThemeManager.isCurrentVehicle3DSupported)
+            assertEquals(ThemeManager.ThemeTone.AUTO, ThemeManager.getThemeTone("4"))
+            assertTrue(ThemeManager.isHeroBackgroundDark("4", isSystemDark = true))
+        } finally {
+            ThemeManager.isCurrentVehicle3DSupported = true
+        }
+    }
+
+    @Test
+    fun `fallback theme webp assets exist in project assets`() {
+        val workingDirectory = requireNotNull(System.getProperty("user.dir"))
+        val projectDir = generateSequence(File(workingDirectory)) { it.parentFile }
+            .first { File(it, "app").isDirectory }
+        val fallbackDir = File(projectDir, "app/src/main/assets/fallback_theme")
+
+        val bg3D = File(fallbackDir, "lpcar_pic_3d_bg.webp")
+        val widget2x2 = File(fallbackDir, "lpcar_pic_widget_2x2.webp")
+        val widget4x2 = File(fallbackDir, "lpcar_pic_widget_4x2.webp")
+
+        assertTrue("lpcar_pic_3d_bg.webp must exist", bg3D.exists())
+        assertTrue("lpcar_pic_3d_bg.webp must be > 50KB", bg3D.length() > 50_000L)
+
+        assertTrue("lpcar_pic_widget_2x2.webp must exist", widget2x2.exists())
+        assertTrue("lpcar_pic_widget_2x2.webp must be > 10KB", widget2x2.length() > 10_000L)
+
+        assertTrue("lpcar_pic_widget_4x2.webp must exist", widget4x2.exists())
+        assertTrue("lpcar_pic_widget_4x2.webp must be > 10KB", widget4x2.length() > 10_000L)
+    }
+
+    @Test
+    fun `control widget and compact widget integrate fallback background when 3d not supported`() {
+        val workingDirectory = requireNotNull(System.getProperty("user.dir"))
+        val projectDir = generateSequence(File(workingDirectory)) { it.parentFile }
+            .first { File(it, "app").isDirectory }
+
+        val widgetSource = File(projectDir, "app/src/main/java/com/leapauto/app/ControlWidget.kt").readText()
+        assertTrue("ControlWidget must check isVehicle3DSupported", widgetSource.contains("ThemeManager.isVehicle3DSupported"))
+
+        val compactWidgetSource = File(projectDir, "app/src/main/java/com/leapauto/app/CompactControlWidget.kt").readText()
+        assertTrue("CompactControlWidget must check isVehicle3DSupported", compactWidgetSource.contains("ThemeManager.isVehicle3DSupported"))
+
+        val screenSource = File(projectDir, "app/src/main/java/com/leapauto/app/ui/LeapAutoScreen.kt").readText()
+        assertTrue("LeapAutoScreen must check isVehicle3DSupported", screenSource.contains("ThemeManager.isVehicle3DSupported"))
+    }
+
+    @Test
+    fun `theme switch success prompts dialog with cancel and confirm navigation`() {
+        val workingDirectory = requireNotNull(System.getProperty("user.dir"))
+        val projectDir = generateSequence(File(workingDirectory)) { it.parentFile }
+            .first { File(it, "app").isDirectory }
+
+        val sheetSource = File(projectDir, "app/src/main/java/com/leapauto/app/ui/ThemeSelectorBottomSheet.kt").readText()
+        assertTrue("ThemeSelectorBottomSheet must declare showSwitchSuccessDialog", sheetSource.contains("var showSwitchSuccessDialog by remember { mutableStateOf(false) }"))
+        assertTrue("ThemeSelectorBottomSheet must show confirmation dialog text", sheetSource.contains("切换成功，是否返回主页查看？"))
+        assertTrue("ThemeSelectorBottomSheet must have cancel button", sheetSource.contains("\"取消\""))
+        assertTrue("ThemeSelectorBottomSheet must have confirm button", sheetSource.contains("\"确定\""))
+        assertTrue("Confirm button must trigger onNavigateToHome", sheetSource.contains("onNavigateToHome()"))
+
+        val screenSource = File(projectDir, "app/src/main/java/com/leapauto/app/ui/LeapAutoScreen.kt").readText()
+        assertTrue("LeapAutoScreen must route onNavigateToHome to vehicle tab", screenSource.contains("selectedTab = MainNavigationTabs.VEHICLE"))
+    }
 }

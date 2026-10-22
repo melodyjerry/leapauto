@@ -17,6 +17,8 @@ object VehicleImageCache {
     private const val KEY_PREFIX_URL = "pic_url_"
     private const val KEY_PREFIX_META = "pic_meta_"
     private const val KEY_PREFIX_3D_MODEL = "pic_3d_model_"
+    private const val CURRENT_SHADOW_VERSION = 2
+    private const val KEY_PREFIX_SHADOW_VERSION = "shadow_v_"
 
     private val memoryCache = object : LruCache<String, Bitmap>(10) {}
 
@@ -122,6 +124,67 @@ object VehicleImageCache {
             .apply()
     }
 
+    /**
+     * 智能剥离官方 2D 车图自带的车底半透明黑色烘焙杂影（Ambient Occlusion 假阴影）。
+     * 针对车模中下部区域（从 height * 0.65 开始到最底部），识别车体下方与车轮周围近黑灰半透明杂影并将其清零，
+     * 实心不透明车胎、轮毂、车体外包围结构 100% 完整保留，彻底消除实景展台巨幕与小组件上的暗黑脏影。
+     */
+    fun stripGroundShadow(src: Bitmap): Bitmap {
+        val width = src.width
+        val height = src.height
+        if (width <= 0 || height <= 0) return src
+
+        val pixels = IntArray(width * height)
+        src.getPixels(pixels, 0, width, 0, 0, width, height)
+
+        val shadowStartRow = (height * 0.65f).toInt()
+        var modified = false
+
+        // 1. 查找每列中最底部的实心不透明像素（属于轮胎底缘或车身包围边缘）
+        val lowestOpaqueY = IntArray(width) { -1 }
+        for (x in 0 until width) {
+            for (y in height - 1 downTo 0) {
+                val alpha = (pixels[y * width + x] ushr 24) and 0xFF
+                if (alpha >= 240) {
+                    lowestOpaqueY[x] = y
+                    break
+                }
+            }
+        }
+
+        // 2. 彻底清除车底半透明脏阴影
+        for (y in shadowStartRow until height) {
+            val rowOffset = y * width
+            for (x in 0 until width) {
+                val color = pixels[rowOffset + x]
+                val alpha = (color ushr 24) and 0xFF
+                if (alpha == 0) continue
+
+                val r = (color ushr 16) and 0xFF
+                val g = (color ushr 8) and 0xFF
+                val b = color and 0xFF
+
+                // 阴影特征：灰黑色（RGB 差值小且低亮度）且处于半透明态（非实心轮胎）
+                val isAchromaticDark = r < 95 && g < 95 && b < 95 && (maxOf(r, g, b) - minOf(r, g, b) < 35)
+                val isSemiTransparent = alpha < 240
+
+                val underOpaqueBottom = lowestOpaqueY[x] != -1 && y >= lowestOpaqueY[x]
+
+                // 条件 A: 处于车底或轮胎接触点下方且未达完全不透明的像素 -> 100% 为地面弥散杂影
+                // 条件 B: 在底盘下方中下部区域且属于灰黑半透明的杂影
+                if ((underOpaqueBottom && alpha < 248) || (isAchromaticDark && isSemiTransparent)) {
+                    pixels[rowOffset + x] = 0
+                    modified = true
+                }
+            }
+        }
+
+        if (!modified) return src
+        val result = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        result.setPixels(pixels, 0, width, 0, 0, width, height)
+        return result
+    }
+
     fun cropTransparentPixels(src: Bitmap): Bitmap? {
         val width = src.width
         val height = src.height
@@ -217,13 +280,35 @@ object VehicleImageCache {
         val targetFile = if (hasCustom) customFile else getCacheFile(context, vin)
         if (!targetFile.exists() || targetFile.length() <= 0) return null
         return try {
-            val bitmap = BitmapFactory.decodeFile(targetFile.absolutePath)
-            if (bitmap != null) {
-                synchronized(memoryCache) {
-                    memoryCache.put(cacheKey, bitmap)
+            val raw = BitmapFactory.decodeFile(targetFile.absolutePath) ?: return null
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val shadowVersion = prefs.getInt("$KEY_PREFIX_SHADOW_VERSION$vin", 0)
+
+            val processed = if (!hasCustom) {
+                val stripped = stripGroundShadow(raw)
+                if (shadowVersion < CURRENT_SHADOW_VERSION) {
+                    // 自动就地升级清洗本地磁盘旧缓存，固化无阴影纯净图，杜绝旧版本残留
+                    runCatching {
+                        val tmpFile = File(getCacheDir(context), "${vin}.tmp")
+                        FileOutputStream(tmpFile).use { out ->
+                            stripped.compress(Bitmap.CompressFormat.PNG, 100, out)
+                        }
+                        if (targetFile.exists()) targetFile.delete()
+                        if (!tmpFile.renameTo(targetFile)) {
+                            tmpFile.copyTo(targetFile, overwrite = true)
+                            tmpFile.delete()
+                        }
+                        prefs.edit().putInt("$KEY_PREFIX_SHADOW_VERSION$vin", CURRENT_SHADOW_VERSION).apply()
+                        Log.i(TAG, "已自动清洗并升级本地车图磁盘缓存(彻底去除地面阴影): $vin")
+                    }
                 }
+                stripped
+            } else raw
+
+            synchronized(memoryCache) {
+                memoryCache.put(cacheKey, processed)
             }
-            bitmap
+            processed
         } catch (_: Exception) {
             null
         }
@@ -275,10 +360,11 @@ object VehicleImageCache {
                 null
             }
             if (bitmap != null) {
+                val processed = if (source == WidgetImageSource.OFFICIAL_2D) stripGroundShadow(bitmap) else bitmap
                 synchronized(memoryCache) {
-                    memoryCache.put(cacheKey, bitmap)
+                    memoryCache.put(cacheKey, processed)
                 }
-                return bitmap
+                return processed
             }
         }
         return null
@@ -329,8 +415,12 @@ object VehicleImageCache {
         if (meta == null) {
             val reason = if (diagnostics.isNotEmpty()) diagnostics.joinToString("\n\n") else "全部候选接口未返回车图"
             Log.w(TAG, "车图元数据获取失败:\n$reason")
+            ThemeManager.setVehicle3DSupported(context, vin, false)
             return false
         }
+
+        val is3dSupported = !meta.h5Key.isNullOrBlank()
+        ThemeManager.setVehicle3DSupported(context, vin, is3dSupported)
 
         val rawUrl = meta.shareBindUrl
         val url = if (rawUrl.startsWith("http://", ignoreCase = true)) {
@@ -371,22 +461,28 @@ object VehicleImageCache {
                     val body = response.body
                     val bytes = body?.bytes()
                     if (bytes != null && bytes.isNotEmpty()) {
-                        val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-                        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)
-                        if (options.outWidth > 0 && options.outHeight > 0) {
+                        val decoded = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                        if (decoded != null && decoded.width > 0 && decoded.height > 0) {
+                            val stripped = stripGroundShadow(decoded)
                             val tmpFile = File(getCacheDir(context), "${vin}.tmp")
-                            FileOutputStream(tmpFile).use { it.write(bytes) }
+                            FileOutputStream(tmpFile).use { out ->
+                                stripped.compress(Bitmap.CompressFormat.PNG, 100, out)
+                            }
                             if (file.exists()) file.delete()
                             if (!tmpFile.renameTo(file)) {
                                 tmpFile.copyTo(file, overwrite = true)
                                 tmpFile.delete()
                             }
-                            prefs.edit().putString("$KEY_PREFIX_URL$vin", url).apply()
+                            prefs.edit()
+                                .putString("$KEY_PREFIX_URL$vin", url)
+                                .putInt("$KEY_PREFIX_SHADOW_VERSION$vin", CURRENT_SHADOW_VERSION)
+                                .apply()
                             synchronized(memoryCache) {
                                 memoryCache.remove(vin)
+                                memoryCache.put("official_$vin", stripped)
                             }
                             imageUpdated = true
-                            Log.i(TAG, "2D 车图极速同步成功: ${options.outWidth}x${options.outHeight}")
+                            Log.i(TAG, "2D 车图极速同步成功 (已去除车底阴影): ${stripped.width}x${stripped.height}")
                         }
                     }
                 }
