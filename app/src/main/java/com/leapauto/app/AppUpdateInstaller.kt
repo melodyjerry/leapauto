@@ -3,7 +3,6 @@ package com.leapauto.app
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import android.os.Build
 import android.provider.Settings
 import android.util.Log
 import androidx.core.content.FileProvider
@@ -267,28 +266,22 @@ object AppUpdateInstaller {
             return
         }
 
-        // Android 8.0+ 检查未知来源安装权限
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val canInstall = context.packageManager.canRequestPackageInstalls()
-            if (!canInstall) {
-                val manageIntent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
-                    data = Uri.parse("package:${context.packageName}")
-                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                }
-                context.startActivity(manageIntent)
-                return
+        // Android 8.0+ 检查未知来源安装权限（minSdk 26，恒成立）
+        val canInstall = context.packageManager.canRequestPackageInstalls()
+        if (!canInstall) {
+            val manageIntent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
+                data = Uri.parse("package:${context.packageName}")
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
             }
+            context.startActivity(manageIntent)
+            return
         }
 
-        val uri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            FileProvider.getUriForFile(
-                context,
-                "${context.packageName}.fileprovider",
-                apkFile
-            )
-        } else {
-            Uri.fromFile(apkFile)
-        }
+        val uri = FileProvider.getUriForFile(
+            context,
+            "${context.packageName}.fileprovider",
+            apkFile
+        )
 
         val installIntent = Intent(Intent.ACTION_VIEW).apply {
             setDataAndType(uri, "application/vnd.android.package-archive")

@@ -192,8 +192,51 @@ class VehicleImageCacheTest {
         org.junit.Assert.assertTrue("VehicleImageCache must define stripGroundShadow", cacheFile.contains("fun stripGroundShadow(src: Bitmap): Bitmap"))
         org.junit.Assert.assertTrue("sync must call stripGroundShadow", cacheFile.contains("val stripped = stripGroundShadow(decoded)"))
         org.junit.Assert.assertTrue("loadCachedBitmap must call stripGroundShadow", cacheFile.contains("stripGroundShadow(raw)"))
-        org.junit.Assert.assertTrue("loadCachedBitmap must auto-upgrade disk cache", cacheFile.contains("shadowVersion < CURRENT_SHADOW_VERSION"))
+        org.junit.Assert.assertTrue("sync must refresh stale shadow-version caches", cacheFile.contains("fun shouldRefreshOfficialImage("))
+        org.junit.Assert.assertTrue("sync must use the refresh decision", cacheFile.contains("shouldRefreshOfficialImage("))
         org.junit.Assert.assertTrue("loadWidgetBitmap must call stripGroundShadow for official 2d", cacheFile.contains("val processed = if (source == WidgetImageSource.OFFICIAL_2D) stripGroundShadow(bitmap) else bitmap"))
+
+        val loadSection = cacheFile.substringAfter("fun loadCachedBitmap").substringBefore("fun loadWidgetBitmap")
+        org.junit.Assert.assertFalse(
+            "a stale cache must not be re-stripped and stamped on read; sync re-downloads the original instead",
+            loadSection.contains("CURRENT_SHADOW_VERSION") || loadSection.contains("KEY_PREFIX_SHADOW_VERSION")
+        )
+    }
+
+    @Test
+    fun `official image refresh follows url, file and shadow version staleness`() {
+        org.junit.Assert.assertTrue(
+            "a URL change must trigger a refresh",
+            VehicleImageCache.shouldRefreshOfficialImage("https://cdn/a.png", "https://cdn/b.png", true, 1024L, 3)
+        )
+        org.junit.Assert.assertTrue(
+            "a missing cache file must trigger a refresh",
+            VehicleImageCache.shouldRefreshOfficialImage("https://cdn/a.png", "https://cdn/a.png", false, 0L, 3)
+        )
+        org.junit.Assert.assertTrue(
+            "an empty cache file must trigger a refresh",
+            VehicleImageCache.shouldRefreshOfficialImage("https://cdn/a.png", "https://cdn/a.png", true, 0L, 3)
+        )
+        org.junit.Assert.assertTrue(
+            "an outdated shadow algorithm version must re-download the original image",
+            VehicleImageCache.shouldRefreshOfficialImage("https://cdn/a.png", "https://cdn/a.png", true, 1024L, 2)
+        )
+        org.junit.Assert.assertFalse(
+            "an up-to-date cache must be reused",
+            VehicleImageCache.shouldRefreshOfficialImage("https://cdn/a.png", "https://cdn/a.png", true, 1024L, 3)
+        )
+    }
+
+    @Test
+    fun `sync must not persist a 3d downgrade when metadata lookup fails`() {
+        val projectDir = projectDirectory()
+        val cacheFile = java.io.File(projectDir, "app/src/main/java/com/leapauto/app/VehicleImageCache.kt").readText()
+
+        val failureBranch = cacheFile.substringAfter("if (meta == null) {").substringBefore("return false")
+        org.junit.Assert.assertFalse(
+            "a transient metadata/network failure must not permanently downgrade the vehicle to 2D",
+            failureBranch.contains("setVehicle3DSupported(context, vin, false)")
+        )
     }
 
     @Test

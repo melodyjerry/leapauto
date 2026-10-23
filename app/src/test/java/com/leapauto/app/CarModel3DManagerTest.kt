@@ -682,8 +682,8 @@ class CarModel3DManagerTest {
 
         // 老款 2D 车型：无实景大图、无 3D 天幕时，2D 程序化渐变底色跟随系统深浅，避免深色模式深字撞暗底
         assertTrue(screenSource.contains("val isHeroDark = when {"))
-        assertTrue(screenSource.contains("hasThemeBg -> ThemeManager.isHeroBackgroundDark(selectedThemeId, isDark)"))
-        assertTrue(screenSource.contains("show3D -> ThemeManager.isHeroBackgroundDark(selectedThemeId, isDark)"))
+        assertTrue(screenSource.contains("hasThemeBg -> ThemeManager.isHeroBackgroundDark(selectedThemeId, isDark, context, vehicleVin)"))
+        assertTrue(screenSource.contains("show3D -> ThemeManager.isHeroBackgroundDark(selectedThemeId, isDark, context, vehicleVin)"))
         assertTrue(screenSource.contains("else -> isDark"))
     }
 

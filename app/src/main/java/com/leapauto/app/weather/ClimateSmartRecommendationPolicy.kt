@@ -1,15 +1,15 @@
 package com.leapauto.app.weather
 
-import androidx.compose.ui.graphics.Color
+import com.leapauto.app.ClimatePresetAction
 import com.leapauto.app.R
 
 data class ClimateSmartSuggestion(
     val title: String,
     val description: String,
     val actionLabel: String,
+    val preset: ClimatePresetAction,
     val command: String,
-    val iconRes: Int,
-    val accentColor: Color
+    val iconRes: Int
 )
 
 object ClimateSmartRecommendationPolicy {
@@ -19,55 +19,40 @@ object ClimateSmartRecommendationPolicy {
         isAcOn: Boolean,
         activePreset: String? = null
     ): ClimateSmartSuggestion? {
-        val indoor = indoorTempStr?.replace("°C", "", ignoreCase = true)?.replace("°", "")?.trim()?.toDoubleOrNull()
-        val outdoor = weather?.tempDouble
-        val humidity = weather?.humidityInt ?: 0
-        val isRainOrSnow = weather?.isRainy == true || weather?.isSnowy == true
-
-        // 1. 雨雪潮湿除雾场景 (正在下雨/下雪 或 湿度 >= 80%)
-        if (isRainOrSnow || humidity >= 80) {
-            if (activePreset != "windshieldDefrost") {
-                return ClimateSmartSuggestion(
-                    title = if (isRainOrSnow) "雨雪天气 · 易起雾" else "空气潮湿 · 易起雾",
-                    description = "开启前风挡快速除雾，保持清晰行车视野",
-                    actionLabel = "一键除雾",
-                    command = "windshieldDefrost",
-                    iconRes = R.drawable.ic_windshield_defrost,
-                    accentColor = Color(0xFF00B0FF) // 冰蓝
+        val indoor = indoorTempStr?.replace("°C", "", ignoreCase = true)
+            ?.replace("℃", "")?.replace("°", "")?.trim()?.toDoubleOrNull()
+            ?.takeIf { it.isFinite() && it in -40.0..80.0 }
+        val rainOrSnow = weather?.isRainy == true || weather?.isSnowy == true
+        val humid = weather?.humidityInt?.let { it in 80..100 } == true
+        val candidates = buildList {
+            if (rainOrSnow) add(defrostSuggestion(true))
+            if (indoor != null && indoor >= 32.0) add(
+                ClimateSmartSuggestion(
+                    "车内偏热 · 建议降温", "车内 ${indoor}℃，可开启极速降温",
+                    "极速降温", ClimatePresetAction.QUICK_COOL, "quickCool",
+                    R.drawable.ic_phosphor_snowflake
                 )
-            }
-        }
-
-        // 2. 夏季烈日暴晒高温场景 (车内 >= 32℃ 或 车内高于室外 6℃+)
-        if (indoor != null && (indoor >= 32.0 || (outdoor != null && indoor - outdoor >= 6.0))) {
-            if (activePreset != "rapidCooling") {
-                val subText = if (outdoor != null) "室外 ${outdoor.toInt()}℃ · 车内 ${indoor.toInt()}℃" else "车内已达 ${indoor.toInt()}℃"
-                return ClimateSmartSuggestion(
-                    title = "烈日暴晒 · 闷热高温",
-                    description = "$subText，建议极速降温排热",
-                    actionLabel = "极速降温",
-                    command = "rapidCooling",
-                    iconRes = R.drawable.ic_phosphor_snowflake,
-                    accentColor = Color(0xFF0066FF) // 零跑蓝
+            )
+            if (indoor != null && indoor <= 12.0) add(
+                ClimateSmartSuggestion(
+                    "车内偏冷 · 建议升温", "车内 ${indoor}℃，可开启极速升温",
+                    "舒适升温", ClimatePresetAction.QUICK_HEAT, "quickHeat",
+                    R.drawable.ic_phosphor_sun
                 )
-            }
+            )
+            if (humid && !rainOrSnow) add(defrostSuggestion(false))
         }
-
-        // 3. 冬季严寒寒冷场景 (室外 <= 10℃ 或 车内 <= 12℃)
-        if ((outdoor != null && outdoor <= 10.0) || (indoor != null && indoor <= 12.0)) {
-            if (activePreset != "rapidHeating") {
-                val tempText = if (outdoor != null) "室外 ${outdoor.toInt()}℃" else "车内冷"
-                return ClimateSmartSuggestion(
-                    title = "室外寒冷 · $tempText",
-                    description = "开启极速制热升温，温暖座舱随行",
-                    actionLabel = "舒适升温",
-                    command = "rapidHeating",
-                    iconRes = R.drawable.ic_phosphor_sun,
-                    accentColor = Color(0xFFFF7A00) // 暖阳橙
-                )
-            }
+        return candidates.firstOrNull {
+            !isAcOn || (activePreset != it.preset.name && activePreset != it.command)
         }
-
-        return null
     }
+
+    private fun defrostSuggestion(rainOrSnow: Boolean) = ClimateSmartSuggestion(
+        title = if (rainOrSnow) "雨雪天气 · 留意风挡" else "空气潮湿 · 留意风挡",
+        description = "请留意前风挡，若出现起雾可开启除雾",
+        actionLabel = "一键除雾",
+        preset = ClimatePresetAction.WINDSHIELD_DEFROST,
+        command = "defrost",
+        iconRes = R.drawable.ic_windshield_defrost
+    )
 }

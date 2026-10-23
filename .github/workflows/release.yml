@@ -101,7 +101,7 @@ jobs:
           if (-not $version) { throw "Could not read apkVersionName." }
           $apk = Get-ChildItem -LiteralPath app/build/distributions/release -Filter "*-$version.apk" | Select-Object -First 1
           if (-not $apk) { throw "Release APK not found for version $version." }
-          $info = Get-Content -LiteralPath app/src/main/java/com/leapauto/app/AppReleaseInfo.kt -Raw
+          $info = Get-Content -LiteralPath app/src/main/java/com/leapauto/app/AppReleaseInfo.kt -Raw -Encoding UTF8
           $notes = [regex]::Match($info, 'currentReleaseNotes\s*=\s*"([^"]*)"').Groups[1].Value.Replace('\n', "`n")
           "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "apk=$($apk.FullName)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
@@ -133,3 +133,40 @@ jobs:
           body: ${{ steps.meta.outputs.notes }}
           files: ${{ steps.meta.outputs.apk }}
           fail_on_unmatched_files: true
+
+      - name: Set up Node for PGYER CLI
+        if: steps.signing.outputs.signed == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install PGYER CLI
+        if: steps.signing.outputs.signed == 'true'
+        shell: pwsh
+        run: |
+          npm install --global @pgyer/cli@0.2.0
+          $prefix = (npm config get prefix).Trim()
+          $npmBin = Split-Path -Parent (npm root -g).Trim()
+          $extraPaths = @($prefix, $npmBin) | Where-Object { $_ } | Select-Object -Unique
+          $extraPaths | ForEach-Object {
+            $_ | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+          }
+          $env:PATH = ($extraPaths -join ';') + ';' + $env:PATH
+          if (-not (Get-Command pgyer -ErrorAction SilentlyContinue)) {
+            throw "pgyer CLI was not found on PATH after the global install."
+          }
+          pgyer --version
+
+      - name: Publish signed Release APK to PGYER
+        if: steps.signing.outputs.signed == 'true'
+        timeout-minutes: 20
+        shell: pwsh
+        env:
+          PGYER_API_KEY: ${{ secrets.PGYER_API_KEY }}
+          PGYER_UPDATE_DESCRIPTION: ${{ steps.meta.outputs.notes }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:PGYER_API_KEY)) {
+            Write-Warning "PGYER_API_KEY secret is not configured. Skipping the PGYER publish step."
+            exit 0
+          }
+          .\scripts\publish-pgyer.ps1 -SkipBuild -ApkPath "${{ steps.meta.outputs.apk }}" -Shortcut "lingpaozhikong"

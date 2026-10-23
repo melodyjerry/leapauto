@@ -11,13 +11,77 @@ import okhttp3.Request
 import java.io.File
 import java.io.FileOutputStream
 
+/**
+ * 纯像素算法：剥离官方 2D 车图底部的半透明烘焙杂影。
+ *
+ * 判定只依据「该像素位于车身轮廓之下」这一几何事实，
+ * 不再按颜色粗筛，因此绝不会误删车漆暗部、深色轮毂或半透明车窗。
+ */
+internal object GroundShadowStripper {
+    /** 车图下缘起算的地面阴影带（占图片高度比例）。 */
+    const val GROUND_BAND_RATIO = 0.65f
+
+    /** 视为「实心车身」的 alpha 下限。 */
+    const val OPAQUE_ALPHA = 240
+
+    /**
+     * @return 清理后的新像素数组；若未发生任何修改则原样返回入参（引用相同）。
+     */
+    fun strip(pixels: IntArray, width: Int, height: Int): IntArray {
+        if (width <= 0 || height <= 0) return pixels
+
+        val bandStartRow = (height * GROUND_BAND_RATIO).toInt()
+
+        // 每列中最底部的实心像素行号（轮胎底缘/车身包围边缘），-1 表示该列完全没有实心结构。
+        val lowestOpaqueY = IntArray(width) { -1 }
+        for (x in 0 until width) {
+            for (y in height - 1 downTo 0) {
+                val alpha = (pixels[y * width + x] ushr 24) and 0xFF
+                if (alpha >= OPAQUE_ALPHA) {
+                    lowestOpaqueY[x] = y
+                    break
+                }
+            }
+        }
+
+        val cleared = BooleanArray(width * height)
+        var modified = false
+        for (y in bandStartRow until height) {
+            val rowOffset = y * width
+            for (x in 0 until width) {
+                val color = pixels[rowOffset + x]
+                val alpha = (color ushr 24) and 0xFF
+                if (alpha == 0) continue
+
+                val bottom = lowestOpaqueY[x]
+                // 仅清除「位于车身轮廓之下」或「该列完全没有实心结构」的半透明像素。
+                // 车身轮廓之内（含半透明车窗与暗色车漆）的像素一律保留。
+                val belowBody = bottom != -1 && y > bottom
+                val outsideBody = bottom == -1
+                if ((belowBody || outsideBody) && alpha < OPAQUE_ALPHA) {
+                    cleared[rowOffset + x] = true
+                    modified = true
+                }
+            }
+        }
+
+        if (!modified) return pixels
+
+        val result = pixels.copyOf()
+        for (index in cleared.indices) {
+            if (cleared[index]) result[index] = 0
+        }
+        return result
+    }
+}
+
 object VehicleImageCache {
     private const val TAG = "LeapVehiclePic"
     private const val PREFS_NAME = "leap_vehicle_image_cache"
     private const val KEY_PREFIX_URL = "pic_url_"
     private const val KEY_PREFIX_META = "pic_meta_"
     private const val KEY_PREFIX_3D_MODEL = "pic_3d_model_"
-    private const val CURRENT_SHADOW_VERSION = 2
+    private const val CURRENT_SHADOW_VERSION = 3
     private const val KEY_PREFIX_SHADOW_VERSION = "shadow_v_"
 
     private val memoryCache = object : LruCache<String, Bitmap>(10) {}
@@ -137,51 +201,11 @@ object VehicleImageCache {
         val pixels = IntArray(width * height)
         src.getPixels(pixels, 0, width, 0, 0, width, height)
 
-        val shadowStartRow = (height * 0.65f).toInt()
-        var modified = false
+        val stripped = GroundShadowStripper.strip(pixels, width, height)
+        if (stripped === pixels) return src
 
-        // 1. 查找每列中最底部的实心不透明像素（属于轮胎底缘或车身包围边缘）
-        val lowestOpaqueY = IntArray(width) { -1 }
-        for (x in 0 until width) {
-            for (y in height - 1 downTo 0) {
-                val alpha = (pixels[y * width + x] ushr 24) and 0xFF
-                if (alpha >= 240) {
-                    lowestOpaqueY[x] = y
-                    break
-                }
-            }
-        }
-
-        // 2. 彻底清除车底半透明脏阴影
-        for (y in shadowStartRow until height) {
-            val rowOffset = y * width
-            for (x in 0 until width) {
-                val color = pixels[rowOffset + x]
-                val alpha = (color ushr 24) and 0xFF
-                if (alpha == 0) continue
-
-                val r = (color ushr 16) and 0xFF
-                val g = (color ushr 8) and 0xFF
-                val b = color and 0xFF
-
-                // 阴影特征：灰黑色（RGB 差值小且低亮度）且处于半透明态（非实心轮胎）
-                val isAchromaticDark = r < 95 && g < 95 && b < 95 && (maxOf(r, g, b) - minOf(r, g, b) < 35)
-                val isSemiTransparent = alpha < 240
-
-                val underOpaqueBottom = lowestOpaqueY[x] != -1 && y >= lowestOpaqueY[x]
-
-                // 条件 A: 处于车底或轮胎接触点下方且未达完全不透明的像素 -> 100% 为地面弥散杂影
-                // 条件 B: 在底盘下方中下部区域且属于灰黑半透明的杂影
-                if ((underOpaqueBottom && alpha < 248) || (isAchromaticDark && isSemiTransparent)) {
-                    pixels[rowOffset + x] = 0
-                    modified = true
-                }
-            }
-        }
-
-        if (!modified) return src
         val result = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-        result.setPixels(pixels, 0, width, 0, 0, width, height)
+        result.setPixels(stripped, 0, width, 0, 0, width, height)
         return result
     }
 
@@ -250,7 +274,6 @@ object VehicleImageCache {
             tmpFile.delete()
         }
         synchronized(memoryCache) {
-            memoryCache.remove(vin)
             memoryCache.remove("official_$vin")
             memoryCache.put("custom_$vin", bitmap)
         }
@@ -261,7 +284,6 @@ object VehicleImageCache {
         val file = getCustomFile(context, vin)
         if (file.exists()) file.delete()
         synchronized(memoryCache) {
-            memoryCache.remove(vin)
             memoryCache.remove("custom_$vin")
             memoryCache.remove("official_$vin")
         }
@@ -281,29 +303,10 @@ object VehicleImageCache {
         if (!targetFile.exists() || targetFile.length() <= 0) return null
         return try {
             val raw = BitmapFactory.decodeFile(targetFile.absolutePath) ?: return null
-            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            val shadowVersion = prefs.getInt("$KEY_PREFIX_SHADOW_VERSION$vin", 0)
 
-            val processed = if (!hasCustom) {
-                val stripped = stripGroundShadow(raw)
-                if (shadowVersion < CURRENT_SHADOW_VERSION) {
-                    // 自动就地升级清洗本地磁盘旧缓存，固化无阴影纯净图，杜绝旧版本残留
-                    runCatching {
-                        val tmpFile = File(getCacheDir(context), "${vin}.tmp")
-                        FileOutputStream(tmpFile).use { out ->
-                            stripped.compress(Bitmap.CompressFormat.PNG, 100, out)
-                        }
-                        if (targetFile.exists()) targetFile.delete()
-                        if (!tmpFile.renameTo(targetFile)) {
-                            tmpFile.copyTo(targetFile, overwrite = true)
-                            tmpFile.delete()
-                        }
-                        prefs.edit().putInt("$KEY_PREFIX_SHADOW_VERSION$vin", CURRENT_SHADOW_VERSION).apply()
-                        Log.i(TAG, "已自动清洗并升级本地车图磁盘缓存(彻底去除地面阴影): $vin")
-                    }
-                }
-                stripped
-            } else raw
+            // 阴影清理仅用于展示；旧版本缓存交由 sync() 按版本强制重下原图后重剥离，
+            // 避免在已被旧算法误删像素的缓存图上回写并盖章新版本。
+            val processed = if (!hasCustom) stripGroundShadow(raw) else raw
 
             synchronized(memoryCache) {
                 memoryCache.put(cacheKey, processed)
@@ -380,7 +383,6 @@ object VehicleImageCache {
     fun clearCache(context: Context, vin: String) {
         if (vin.isBlank()) return
         synchronized(memoryCache) {
-            memoryCache.remove(vin)
             memoryCache.remove("custom_$vin")
             memoryCache.remove("official_$vin")
             memoryCache.remove("3d_$vin")
@@ -402,6 +404,21 @@ object VehicleImageCache {
      * 同步远端车辆图片及 3D 模型资产。
      * @return 如果成功下载并保存了新的车辆图片或 3D 资产，返回 true；若图片未变化或下载失败，返回 false。
      */
+    /**
+     * 判断官方 2D 原图是否需要重新下载。
+     *
+     * 除 URL 变化/文件缺失外，阴影算法版本落后也必须重新下载原图：
+     * 旧版缓存可能已被旧算法误删像素，重新剥离已处理的缓存无法还原。
+     */
+    internal fun shouldRefreshOfficialImage(
+        cachedUrl: String?,
+        url: String,
+        fileExists: Boolean,
+        fileLength: Long,
+        shadowVersion: Int
+    ): Boolean = cachedUrl != url || !fileExists || fileLength == 0L ||
+        shadowVersion < CURRENT_SHADOW_VERSION
+
     fun sync(context: Context, api: LeapmotorApi, vin: String): Boolean {
         if (vin.isBlank()) return false
         val diagnostics = mutableListOf<String>()
@@ -415,7 +432,7 @@ object VehicleImageCache {
         if (meta == null) {
             val reason = if (diagnostics.isNotEmpty()) diagnostics.joinToString("\n\n") else "全部候选接口未返回车图"
             Log.w(TAG, "车图元数据获取失败:\n$reason")
-            ThemeManager.setVehicle3DSupported(context, vin, false)
+            // 网络/接口异常不代表该车型不支持 3D，不得据此持久化降级结论，避免偶发失败导致永久回退 2D。
             return false
         }
 
@@ -430,6 +447,7 @@ object VehicleImageCache {
         }
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val cachedUrl = prefs.getString("$KEY_PREFIX_URL$vin", null)
+        val cachedShadowVersion = prefs.getInt("$KEY_PREFIX_SHADOW_VERSION$vin", 0)
         val file = getCacheFile(context, vin)
 
         // 保存/更新元数据缓存
@@ -443,7 +461,15 @@ object VehicleImageCache {
 
         // 1. 优先确保轻量 2D 原厂定妆照（约 290KB）极速立现，让首卡在毫秒级呈现完整爱车
         var imageUpdated = false
-        if (cachedUrl != url || !file.exists() || file.length() == 0L) {
+        if (
+            shouldRefreshOfficialImage(
+                cachedUrl = cachedUrl,
+                url = url,
+                fileExists = file.exists(),
+                fileLength = file.length(),
+                shadowVersion = cachedShadowVersion
+            )
+        ) {
             try {
                 Log.i(TAG, "优先从 CDN 下载 2D 车辆定妆照: $url")
                 val candidateUrls = listOf(url, rawUrl).distinct()
@@ -478,7 +504,6 @@ object VehicleImageCache {
                                 .putInt("$KEY_PREFIX_SHADOW_VERSION$vin", CURRENT_SHADOW_VERSION)
                                 .apply()
                             synchronized(memoryCache) {
-                                memoryCache.remove(vin)
                                 memoryCache.put("official_$vin", stripped)
                             }
                             imageUpdated = true

@@ -80,6 +80,12 @@ class SessionStore(context: Context) {
     private val appPrefs = appContext.getSharedPreferences("leap_app_preferences", Context.MODE_PRIVATE)
     private val secureValues = SecureValueStore(context, prefs)
 
+    /**
+     * 仅读取当前车型代码，不触发 Keystore 解密与整会话反序列化。
+     * 供 3D 支持判定等高频只读路径使用。
+     */
+    fun loadSelectedCarType(): String = prefs.getString("carType", "") ?: ""
+
     fun load(): Session = synchronized(SESSION_LOCK) {
         val existingDeviceId = prefs.getString("deviceId", null)?.takeIf { it.isNotBlank() }
         val deviceId = existingDeviceId ?: Crypto.randomDeviceId().also {
@@ -322,6 +328,90 @@ class SessionStore(context: Context) {
     fun saveScheduledPreheatDays(vin: String, days: String) {
         if (vin.isBlank()) return
         prefs.edit().putString("scheduled_preheat_days_$vin", ChargePlanCyclesHelper.toVehicleMask(days)).apply()
+    }
+
+    // 定时空调设置（cmdid=171，默认制热 32℃、7 挡、内循环、前挡出风）
+    fun loadScheduledAcEnabled(vin: String): Boolean {
+        if (vin.isBlank()) return false
+        return prefs.getBoolean("scheduled_ac_enabled_$vin", false)
+    }
+
+    fun saveScheduledAcEnabled(vin: String, enabled: Boolean) {
+        if (vin.isBlank()) return
+        prefs.edit().putBoolean("scheduled_ac_enabled_$vin", enabled).apply()
+    }
+
+    fun loadScheduledAcStartTime(vin: String): String {
+        if (vin.isBlank()) return "07:30"
+        return prefs.getString("scheduled_ac_start_time_$vin", "07:30") ?: "07:30"
+    }
+
+    fun saveScheduledAcStartTime(vin: String, time: String) {
+        if (vin.isBlank()) return
+        prefs.edit().putString("scheduled_ac_start_time_$vin", time).apply()
+    }
+
+    /** 定时空调重复周期：车端原生 7 位 0/1 掩码，如 "1,1,1,1,1,1,1"（默认全周）。 */
+    fun loadScheduledAcDays(vin: String): String {
+        if (vin.isBlank()) return "1,1,1,1,1,1,1"
+        return prefs.getString("scheduled_ac_days_$vin", "1,1,1,1,1,1,1") ?: "1,1,1,1,1,1,1"
+    }
+
+    fun saveScheduledAcDays(vin: String, days: String) {
+        if (vin.isBlank()) return
+        prefs.edit().putString("scheduled_ac_days_$vin", ChargePlanCyclesHelper.toVehicleMask(days)).apply()
+    }
+
+    fun loadScheduledAcTemperature(vin: String): Int {
+        if (vin.isBlank()) return 32
+        return prefs.getInt("scheduled_ac_temperature_$vin", 32)
+    }
+
+    fun saveScheduledAcTemperature(vin: String, temperature: Int) {
+        if (vin.isBlank()) return
+        prefs.edit().putInt("scheduled_ac_temperature_$vin", temperature).apply()
+    }
+
+    fun loadScheduledAcWindLevel(vin: String): Int {
+        if (vin.isBlank()) return 7
+        return prefs.getInt("scheduled_ac_wind_level_$vin", 7)
+    }
+
+    fun saveScheduledAcWindLevel(vin: String, windLevel: Int) {
+        if (vin.isBlank()) return
+        prefs.edit().putInt("scheduled_ac_wind_level_$vin", windLevel).apply()
+    }
+
+    fun loadScheduledAcMode(vin: String): String {
+        if (vin.isBlank()) return ScheduledAcMode.HOT.name
+        return prefs.getString("scheduled_ac_mode_$vin", ScheduledAcMode.HOT.name)
+            ?: ScheduledAcMode.HOT.name
+    }
+
+    fun saveScheduledAcMode(vin: String, mode: ScheduledAcMode) {
+        if (vin.isBlank()) return
+        prefs.edit().putString("scheduled_ac_mode_$vin", mode.name).apply()
+    }
+
+    fun loadScheduledAcCircle(vin: String): String {
+        if (vin.isBlank()) return AirCircle.INNER.name
+        return prefs.getString("scheduled_ac_circle_$vin", AirCircle.INNER.name)
+            ?: AirCircle.INNER.name
+    }
+
+    fun saveScheduledAcCircle(vin: String, circle: AirCircle) {
+        if (vin.isBlank()) return
+        prefs.edit().putString("scheduled_ac_circle_$vin", circle.name).apply()
+    }
+
+    fun loadScheduledAcDefrost(vin: String): Boolean {
+        if (vin.isBlank()) return true
+        return prefs.getBoolean("scheduled_ac_defrost_$vin", true)
+    }
+
+    fun saveScheduledAcDefrost(vin: String, defrost: Boolean) {
+        if (vin.isBlank()) return
+        prefs.edit().putBoolean("scheduled_ac_defrost_$vin", defrost).apply()
     }
 
     /** 用户确认的车型配置，按 VIN 隔离保存，避免多车续航规则串用。 */

@@ -186,6 +186,12 @@ class CommandsTest {
     @Test
     fun climatePresetsKeepTheirVerifiedCommands() {
         assertEquals("170", Commands.build("acOn").cmdid)
+        val acOnState = JSONObject(Commands.build("acOn").stateJson)
+        assertEquals("auto", acOnState.getString("operate"))
+        assertEquals("nohotcold", acOnState.getString("mode"))
+        assertEquals("2", acOnState.getString("windlevel"))
+        assertEquals("24", acOnState.getString("temperature"))
+        assertEquals("in", acOnState.getString("circle"))
         assertEquals("170", Commands.build("acOff").cmdid)
         assertTrue(Commands.build("defrost").stateJson.contains("\"wshld\":\"1\""))
         assertTrue(Commands.build("quickCool").stateJson.contains("\"temperature\":\"18\""))
@@ -373,7 +379,7 @@ class CommandsTest {
         val acOn = ClimateOptimisticUpdates.acOn()
         assertEquals(true, acOn.acSwitch)
         assertEquals("24 °C", acOn.acSetting)
-        assertEquals(3, acOn.windLevel)
+        assertEquals(2, acOn.windLevel)
         assertEquals(AirCircle.INNER, acOn.circle)
         assertEquals(false, acOn.windshieldDefrost)
 
@@ -802,7 +808,9 @@ class CommandsTest {
 
         assertTrue("availableCommands must include batteryPreheat", screenSource.contains("Cmd(\"batteryPreheat\", \"电池预热\""))
         assertTrue("QuickVehicleActions must handle batteryPreheat button", screenSource.contains("command.name == \"batteryPreheat\""))
-        assertTrue("Must check 10C threshold", screenSource.contains("minTempNumber > 10.0"))
-        assertTrue("Must check SOC 20 threshold", screenSource.contains("rawSoc < 20"))
+        assertTrue("Must delegate the preheat gate to BatteryPreheatGatePolicy", screenSource.contains("BatteryPreheatGatePolicy.decide("))
+        assertTrue("Must parse temperature through BatteryPreheatGatePolicy", screenSource.contains("BatteryPreheatGatePolicy.parseTemperatureC("))
+        assertTrue("Must parse soc through BatteryPreheatGatePolicy", screenSource.contains("BatteryPreheatGatePolicy.parseSocPercent("))
+        assertFalse("Must not inline a raw soc parse that breaks on percentage strings", screenSource.contains("status?.soc?.trim()?.toIntOrNull()"))
     }
 }

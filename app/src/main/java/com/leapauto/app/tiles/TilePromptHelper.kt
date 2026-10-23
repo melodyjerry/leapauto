@@ -53,12 +53,10 @@ object TilePromptHelper {
     fun isSupported(): Boolean = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
 
     fun requestTilesUpdate(context: Context) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            try {
-                TileService.requestListeningState(context, ComponentName(context, LockToggleTileService::class.java))
-                TileService.requestListeningState(context, ComponentName(context, ClimateTileService::class.java))
-            } catch (_: Exception) {}
-        }
+        try {
+            TileService.requestListeningState(context, ComponentName(context, LockToggleTileService::class.java))
+            TileService.requestListeningState(context, ComponentName(context, ClimateTileService::class.java))
+        } catch (_: Exception) {}
     }
 
     fun requestAddTile(context: Context, type: TileType, onResult: ((Boolean) -> Unit)? = null) {

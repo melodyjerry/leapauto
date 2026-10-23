@@ -31,8 +31,6 @@ import com.leapauto.app.ui.LeapAutoScreen
 import com.leapauto.app.ThemeManager
 import com.leapauto.app.ui.BluetoothKeyDialog
 import com.leapauto.app.ui.BluetoothActionConfirmation
-import com.leapauto.app.ui.BluetoothConfigurationConfirmation
-import com.leapauto.app.ui.BluetoothCalibrationConfirmation
 import com.leapauto.app.ui.theme.LeapAutoTheme
 import com.leapauto.app.bluetooth.BleAccessPolicy
 import com.leapauto.app.bluetooth.BleConnectionPhase
@@ -161,12 +159,6 @@ private data class PendingClimateConfirmation(
     val climateTemperatureRequestId: Long?
 )
 
-private data class PendingBluetoothCalibration(
-    val calibration: BleCalibration?,
-    val identity: BleSessionIdentity,
-    val generation: Long
-)
-
 class MainActivity : ComponentActivity() {
 
     private lateinit var sessionStore: SessionStore
@@ -263,6 +255,7 @@ class MainActivity : ComponentActivity() {
     private var scheduledPreheatEnabled by mutableStateOf(false)
     private var scheduledPreheatStartTime by mutableStateOf("23:00")
     private var scheduledPreheatDays by mutableStateOf("1,1,1,1,1,1,1")
+    private var scheduledAcPlan by mutableStateOf(ScheduledAcPlan())
     private var versionUpdateState by mutableStateOf<VersionUpdateState>(VersionUpdateState.Idle)
     private var vehicleOtaState by mutableStateOf<VehicleOtaState>(VehicleOtaState.Idle)
     private var showPowerTypeDialog by mutableStateOf(false)
@@ -278,10 +271,8 @@ class MainActivity : ComponentActivity() {
     private lateinit var bluetoothRuntime: BleKeyRuntime
     private lateinit var bluetoothCloud: BleCloudCoordinator
     private var bluetoothCloudState by mutableStateOf(BleCloudUiState())
-    private var bluetoothCalibrationConfirmation by mutableStateOf<PendingBluetoothCalibration?>(null)
     private var bluetoothManagedKey by mutableStateOf<BleManagedKey?>(null)
     private var bluetoothBackgroundRunning by mutableStateOf(false)
-    private var bluetoothConfigurationConfirmation by mutableStateOf<BlePassiveConfiguration?>(null)
     private var bluetoothConfigurationIdentity: BleSessionIdentity? = null
     private var bluetoothSettingsRequestId by mutableStateOf(0L)
     private var showBluetoothKey by mutableStateOf(false)
@@ -382,7 +373,7 @@ class MainActivity : ComponentActivity() {
         widgetBackgroundStyle = sessionStore.loadWidgetBackgroundStyle()
         widgetOpacity = sessionStore.loadWidgetOpacity()
         ThemeManager.cleanInvalidBlurredCache(this)
-        ThemeManager.isVehicle3DSupported(this, session.selectedVin)
+        ThemeManager.updateCurrentVehicle3DSupported(this, session.selectedVin)
         selectedThemeId = ThemeManager.getActiveThemeId(this, session.selectedVin)
         worker.execute {
             VehicleImageCache.loadCachedBitmap(this@MainActivity, session.selectedVin)
@@ -420,6 +411,7 @@ class MainActivity : ComponentActivity() {
         scheduledPreheatEnabled = sessionStore.loadScheduledPreheatEnabled(session.selectedVin)
         scheduledPreheatStartTime = sessionStore.loadScheduledPreheatStartTime(session.selectedVin)
         scheduledPreheatDays = sessionStore.loadScheduledPreheatDays(session.selectedVin)
+        scheduledAcPlan = loadScheduledAcPlan(session.selectedVin)
         ChargeNotificationManager.ensureChannel(this)
         ParkingAnomalyNotificationManager.ensureChannel(this)
         if (pinSaved) {
@@ -484,8 +476,11 @@ class MainActivity : ComponentActivity() {
                     scheduledPreheatEnabled = scheduledPreheatEnabled,
                     scheduledPreheatStartTime = scheduledPreheatStartTime,
                     scheduledPreheatDays = scheduledPreheatDays,
+                    scheduledAcPlan = scheduledAcPlan,
                     onApplyChargingSettings = ::applyHealthyAndScheduledCharging,
                     onApplyScheduledPreheat = ::applyScheduledBatteryPreheat,
+                    onApplyScheduledAc = ::applyScheduledAirConditioning,
+                    onLoadScheduledAc = ::fetchScheduledAcForEditor,
                     onRefreshChargingSettings = { syncChargePlanFromServer(force = true) },
                     onFetchParkingPhoto = ::fetchParkingPhoto,
                     networkDebugEnabled = networkDebugEnabled,
@@ -734,8 +729,6 @@ class MainActivity : ComponentActivity() {
     private fun hideBluetoothKey() {
         showBluetoothKey = false
         bluetoothControlConfirmation = null
-        bluetoothConfigurationConfirmation = null
-        bluetoothCalibrationConfirmation = null
         bluetoothConfigurationIdentity = null
         bluetoothPermissionGeneration = null
         bluetoothScanAfterPermissionGeneration = null
@@ -906,6 +899,37 @@ class MainActivity : ComponentActivity() {
                 val mac = (bluetooth?.opt("mac") as? String)?.let { BleVehicleMetadata.normalizeAddress(it) }
                 if (!mac.isNullOrBlank() && sessionStore.loadVehicleBluetoothMac(targetVin) == null) {
                     sessionStore.saveVehicleBluetoothMac(targetVin, mac)
+                }
+            }
+        }
+    }
+
+    private var lastScheduledAcFetchEpochMs = 0L
+    private var lastScheduledAcFetchVin = ""
+
+    /** 从车端查询已保存的定时空调预约（cmdid=171），并回写本地状态。 */
+    private fun syncScheduledAcFromVehicle(vin: String? = null, force: Boolean = false) {
+        val targetVin = vin ?: session.selectedVin
+        if (targetVin.isBlank() || !loggedIn) return
+        val now = System.currentTimeMillis()
+        if (!force && targetVin == lastScheduledAcFetchVin && now - lastScheduledAcFetchEpochMs < 30_000L) {
+            return
+        }
+        asyncWorker.execute {
+            runCatching {
+                val state = LeapmotorApi(session).getScheduledAirConditioning() ?: return@runCatching
+                lastScheduledAcFetchEpochMs = System.currentTimeMillis()
+                lastScheduledAcFetchVin = targetVin
+                val merged = if (state.hasSchedule) {
+                    state.plan
+                } else {
+                    loadScheduledAcPlan(targetVin).copy(enabled = false)
+                }
+                persistScheduledAcPlan(targetVin, merged)
+                mainHandler.post {
+                    if (session.selectedVin == targetVin) {
+                        scheduledAcPlan = merged
+                    }
                 }
             }
         }
@@ -1131,9 +1155,7 @@ class MainActivity : ComponentActivity() {
 
     private fun clearBluetoothState(closePage: Boolean, endSession: Boolean = closePage) {
         bluetoothGeneration++
-        bluetoothCalibrationConfirmation = null
         bluetoothControlConfirmation = null
-        bluetoothConfigurationConfirmation = null
         bluetoothConfigurationIdentity = null
         if (bluetoothPinRequestPending) {
             clearPendingPinProtectedAction(cancel = true)
@@ -2065,6 +2087,138 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private suspend fun fetchScheduledAcForEditor(): ScheduledAcPlan {
+        val vin = session.selectedVin
+        val generation = session.generation
+        check(loggedIn && vin.isNotBlank())
+        val state = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            LeapmotorApi(session).getScheduledAirConditioning()
+                ?: error("预约查询失败")
+        }
+        check(loggedIn && session.selectedVin == vin && session.generation == generation)
+        val plan = state.editorPlan(loadScheduledAcPlan(vin))
+        persistScheduledAcPlan(vin, plan)
+        scheduledAcPlan = plan
+        return plan
+    }
+
+    private fun loadScheduledAcPlan(vin: String): ScheduledAcPlan = ScheduledAcPlan(
+        enabled = sessionStore.loadScheduledAcEnabled(vin),
+        startTime = sessionStore.loadScheduledAcStartTime(vin),
+        days = sessionStore.loadScheduledAcDays(vin),
+        temperatureC = sessionStore.loadScheduledAcTemperature(vin),
+        windLevel = sessionStore.loadScheduledAcWindLevel(vin),
+        mode = ScheduledAcMode.fromName(sessionStore.loadScheduledAcMode(vin)),
+        circle = AirCircle.entries.firstOrNull { it.name == sessionStore.loadScheduledAcCircle(vin) }
+            ?: AirCircle.INNER,
+        windshieldDefogging = sessionStore.loadScheduledAcDefrost(vin)
+    )
+
+    private fun persistScheduledAcPlan(vin: String, plan: ScheduledAcPlan) {
+        sessionStore.saveScheduledAcEnabled(vin, plan.enabled)
+        sessionStore.saveScheduledAcStartTime(vin, plan.startTime)
+        sessionStore.saveScheduledAcDays(vin, plan.days)
+        sessionStore.saveScheduledAcTemperature(vin, plan.temperatureC)
+        sessionStore.saveScheduledAcWindLevel(vin, plan.windLevel)
+        sessionStore.saveScheduledAcMode(vin, plan.mode)
+        sessionStore.saveScheduledAcCircle(vin, plan.circle)
+        sessionStore.saveScheduledAcDefrost(vin, plan.windshieldDefogging)
+    }
+
+    private fun applyScheduledAirConditioning(plan: ScheduledAcPlan) {
+        val vin = session.selectedVin
+        val generation = session.generation
+        if (plan.enabled) {
+            persistScheduledAcPlan(vin, plan)
+            scheduledAcPlan = plan
+        }
+
+        val started = System.currentTimeMillis()
+        worker.execute {
+            try {
+                // 间隔 1.5 秒避开可能的并发控车锁，杜绝网关“系统繁忙”冲突
+                Thread.sleep(1500)
+                if (session.selectedVin != vin || session.generation != generation) return@execute
+                val api = LeapmotorApi(session)
+                val savedPin = sessionStore.loadOpPassword().orEmpty()
+                val resp = api.setScheduledAirConditioning(plan, savedPin)
+                val code = resp.optInt("code", resp.optInt("result", -1))
+                val msg = resp.optString("msg", resp.optString("message", ""))
+                val success = code == 200 || code == 0
+                if (!plan.enabled && success) {
+                    Thread.sleep(1500)
+                    if (session.selectedVin != vin || session.generation != generation) return@execute
+                    val confirmed = runCatching { api.getScheduledAirConditioning() }.getOrNull()
+                    mainHandler.post {
+                        if (session.selectedVin != vin || session.generation != generation) return@post
+                        if (confirmed != null && !confirmed.hasSchedule) {
+                            persistScheduledAcPlan(vin, plan)
+                            scheduledAcPlan = plan
+                            Toast.makeText(this@MainActivity, "已取消定时空调", Toast.LENGTH_SHORT).show()
+                        } else {
+                            Toast.makeText(this@MainActivity, "取消请求已提交，尚未确认取消，请稍后刷新", Toast.LENGTH_LONG).show()
+                        }
+                    }
+                    return@execute
+                }
+                if (!success) {
+                    ErrorLogs.repository.record(
+                        ErrorLogEntry(
+                            timestampMs = System.currentTimeMillis(),
+                            category = ErrorLogCategory.CONTROL_FAILURE,
+                            stage = "scheduled_ac",
+                            httpStatus = code.takeIf { it != -1 },
+                            durationMs = System.currentTimeMillis() - started,
+                            retryCount = 0,
+                            appVersion = BuildConfig.VERSION_NAME,
+                            message = buildString {
+                                appendLine("定时空调下发未完成:")
+                                appendLine("VIN: $vin")
+                                appendLine("参数: enabled=${plan.enabled}, startTime=${plan.startTime}, days=${plan.days}")
+                                appendLine("状态码: code=$code, msg=$msg")
+                                appendLine("服务端完整返回: $resp")
+                            }
+                        )
+                    )
+                }
+
+                mainHandler.post {
+                    if (success) {
+                        Toast.makeText(
+                            this@MainActivity,
+                            if (plan.enabled) "已设置 ${plan.startTime} 定时空调" else "定时空调已关闭",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    } else {
+                        Toast.makeText(this@MainActivity, if (plan.enabled) "定时空调设置已保存至本地" else "取消定时空调失败，请重试", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            } catch (e: Exception) {
+                val apiError = e as? ApiException
+                ErrorLogs.repository.record(
+                    ErrorLogEntry(
+                        timestampMs = System.currentTimeMillis(),
+                        category = ErrorLogCategory.API_FAILURE,
+                        stage = "scheduled_ac",
+                        httpStatus = apiError?.httpStatus,
+                        durationMs = System.currentTimeMillis() - started,
+                        retryCount = 0,
+                        appVersion = BuildConfig.VERSION_NAME,
+                        message = buildString {
+                            appendLine("定时空调下发异常")
+                            appendLine("VIN: $vin")
+                            appendLine("异常信息: ${e.message ?: e.toString()}")
+                            appendLine("异常堆栈:\n${e.stackTraceToString().take(1200)}")
+                        }
+                    )
+                )
+                mainHandler.post {
+                    Toast.makeText(this@MainActivity, if (plan.enabled) "定时空调已本地保存，待连车同步" else "取消定时空调未确认，请重试", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
     private fun saveVehicleConfig(
         model: String,
         modelYear: String,
@@ -2641,6 +2795,8 @@ class MainActivity : ComponentActivity() {
 
                         // 异步从云端同步最新预约充电计划 (commonConfig 的 config.3)
                         syncChargePlanFromServer(currentVin)
+                        // 异步同步车端已有的定时空调预约 (cmdid=171)
+                        syncScheduledAcFromVehicle(currentVin)
                     }
 
                     // 车端若返回了真实充电计划 (config.3)，非保护期内同步反显更新
@@ -2911,7 +3067,8 @@ class MainActivity : ComponentActivity() {
         scheduledPreheatEnabled = sessionStore.loadScheduledPreheatEnabled(target.vin)
         scheduledPreheatStartTime = sessionStore.loadScheduledPreheatStartTime(target.vin)
         scheduledPreheatDays = sessionStore.loadScheduledPreheatDays(target.vin)
-        ThemeManager.isVehicle3DSupported(this, target.vin)
+        scheduledAcPlan = loadScheduledAcPlan(target.vin)
+        ThemeManager.updateCurrentVehicle3DSupported(this, target.vin)
         selectedThemeId = ThemeManager.getActiveThemeId(this, target.vin)
 
         status = null
@@ -2939,6 +3096,7 @@ class MainActivity : ComponentActivity() {
         syncThemesAndEnsureActive()
         checkAndAutoSyncBluetoothCertificate(target.vin)
         syncChargePlanFromServer(target.vin, force = true)
+        syncScheduledAcFromVehicle(target.vin, force = true)
         checkAndPromptPowerType(target.vin)
         toast("已切换至 ${target.nickname.ifBlank { target.carType }}")
     }

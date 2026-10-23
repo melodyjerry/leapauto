@@ -318,6 +318,95 @@ class ThemeManagerTest {
     }
 
     @Test
+    fun `vehicle 3d support lookup is read only and must not persist or decrypt secrets`() {
+        val workingDirectory = requireNotNull(System.getProperty("user.dir"))
+        val projectDir = generateSequence(File(workingDirectory)) { it.parentFile }
+            .first { File(it, "app").isDirectory }
+
+        val managerSource = File(projectDir, "app/src/main/java/com/leapauto/app/ThemeManager.kt").readText()
+        val lookupBody = managerSource
+            .substringAfter("fun isVehicle3DSupported(")
+            .substringBefore("\n    }")
+
+        assertFalse(
+            "the 3D support lookup must not write to SharedPreferences",
+            lookupBody.contains(".edit()")
+        )
+        assertFalse(
+            "the 3D support lookup must not load the full session (Keystore decryption)",
+            lookupBody.contains("SessionStore(context).load()")
+        )
+        assertTrue(
+            "the 3D support lookup must use the lightweight carType reader",
+            lookupBody.contains("loadSelectedCarType()")
+        )
+        assertFalse(
+            "the 3D support lookup must not mutate the global flag",
+            lookupBody.contains("isCurrentVehicle3DSupported =")
+        )
+        assertTrue(
+            "switching vehicles must explicitly sync the global flag",
+            managerSource.contains("fun updateCurrentVehicle3DSupported(")
+        )
+    }
+
+    @Test
+    fun `hero background tone must be resolved per vehicle instead of the global flag`() {
+        val workingDirectory = requireNotNull(System.getProperty("user.dir"))
+        val projectDir = generateSequence(File(workingDirectory)) { it.parentFile }
+            .first { File(it, "app").isDirectory }
+
+        val screenSource = File(projectDir, "app/src/main/java/com/leapauto/app/ui/LeapAutoScreen.kt").readText()
+        val heroToneCalls = screenSource.lines().filter { it.contains("ThemeManager.isHeroBackgroundDark(") }
+
+        assertTrue("hero tone must be resolved", heroToneCalls.isNotEmpty())
+        heroToneCalls.forEach { call ->
+            assertTrue(
+                "hero tone must pass the vehicle context so per-VIN 3D support is honoured: $call",
+                call.contains("context") && call.contains("vehicleVin")
+            )
+        }
+    }
+
+    @Test
+    fun `session store exposes a lightweight carType reader without keystore decryption`() {
+        val workingDirectory = requireNotNull(System.getProperty("user.dir"))
+        val projectDir = generateSequence(File(workingDirectory)) { it.parentFile }
+            .first { File(it, "app").isDirectory }
+
+        val storeSource = File(projectDir, "app/src/main/java/com/leapauto/app/SessionStore.kt").readText()
+        assertTrue("SessionStore must expose loadSelectedCarType", storeSource.contains("fun loadSelectedCarType(): String"))
+        val readerBody = storeSource
+            .substringAfter("fun loadSelectedCarType(): String")
+            .substringBefore("\n")
+        assertFalse(
+            "loadSelectedCarType must not decrypt secure values",
+            readerBody.contains("secureValues")
+        )
+    }
+
+    @Test
+    fun `hero 3d support memoization must refresh after a successful image sync`() {
+        val workingDirectory = requireNotNull(System.getProperty("user.dir"))
+        val projectDir = generateSequence(File(workingDirectory)) { it.parentFile }
+            .first { File(it, "app").isDirectory }
+
+        val screenSource = File(projectDir, "app/src/main/java/com/leapauto/app/ui/LeapAutoScreen.kt").readText()
+        val is3dMemo = screenSource
+            .substringAfter("val is3dSupported =")
+            .substringBefore("\n    }")
+
+        assertTrue(
+            "is3dSupported must be remembered per vehicle to avoid repeated preference reads",
+            is3dMemo.contains("remember(vehicleVin")
+        )
+        assertTrue(
+            "is3dSupported must also key on vehicleImageVersion so a successful sync can promote 2D to 3D",
+            is3dMemo.contains("vehicleImageVersion")
+        )
+    }
+
+    @Test
     fun `theme switch success prompts dialog with cancel and confirm navigation`() {
         val workingDirectory = requireNotNull(System.getProperty("user.dir"))
         val projectDir = generateSequence(File(workingDirectory)) { it.parentFile }

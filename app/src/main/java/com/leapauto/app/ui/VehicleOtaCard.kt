@@ -17,11 +17,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -46,7 +44,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.res.painterResource
@@ -57,7 +54,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.leapauto.app.OtaStatus
 import com.leapauto.app.R
-import com.leapauto.app.VehicleOtaInfo
 import com.leapauto.app.VehicleOtaPolicy
 import com.leapauto.app.VehicleOtaState
 import com.leapauto.app.ui.theme.glassInsetSurface
@@ -639,7 +635,7 @@ private fun FotaSafetyConfirmDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        modifier = solidDialogModifier(),
+        modifier = Modifier.solidDialogModifier(),
         containerColor = MaterialTheme.colorScheme.surface,
         tonalElevation = 0.dp,
         shape = RoundedCornerShape(20.dp),
@@ -715,7 +711,7 @@ private fun FotaScheduleTimeDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        modifier = solidDialogModifier(),
+        modifier = Modifier.solidDialogModifier(),
         containerColor = MaterialTheme.colorScheme.surface,
         tonalElevation = 0.dp,
         shape = RoundedCornerShape(20.dp),

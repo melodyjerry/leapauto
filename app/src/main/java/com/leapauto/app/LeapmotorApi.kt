@@ -2231,6 +2231,87 @@ class LeapmotorApi internal constructor(
         return http(controlUrl, method = "POST", headers = headers, formBody = signedBody)
     }
 
+    /**
+     * 定时空调预约（cmdid=171）。
+     * 官方抓包：POST {appCenter}/carownerservice/v3/api/appremotectl/appointment
+     */
+    fun setScheduledAirConditioning(plan: ScheduledAcPlan, opPassword: String = ""): JSONObject {
+        requireVin()
+        try {
+            ensureFreshOldToken()
+        } catch (_: Exception) {}
+        val route = ensureRoute()
+        val command = Commands.buildScheduledAc(plan, session.deviceId)
+
+        val params = LinkedHashMap<String, String>()
+        params["cmdid"] = command.cmdid
+        params["state"] = command.stateJson
+        params["carvin"] = session.selectedVin
+        if (opPassword.isNotBlank()) {
+            params["oppwd"] = Crypto.encryptOperationPassword(opPassword, getOperationPasswordToken())
+        }
+
+        val signedBody = oldSignedParams(params)
+        val headers = combinedAppAndGatewayHeaders(signedBody, needLogin = true)
+        val host = if (route.appCenter.isNotBlank()) route.appCenter else route.appRegion
+        val candidates = listOf(
+            "https://appgateway.leapmotor.com/carownerservice/v3/api/appremotectl/appointment",
+            "$host/carownerservice/v3/api/appremotectl/appointment"
+        ).distinct()
+
+        var lastException: Exception? = null
+        for (url in candidates) {
+            try {
+                val resp = http(url, method = "POST", headers = headers, formBody = signedBody)
+                checkControlResult(resp)
+                return resp
+            } catch (e: Exception) {
+                lastException = e
+            }
+        }
+        throw (lastException ?: ApiException("定时空调设置失败"))
+    }
+
+    /**
+     * 查询定时空调预约（cmdid=171）。
+     * 官方抓包：GET {appCenter}/carownerservice/v3/api/appremotectl/getappointment
+     * 返回 null 表示查询失败；hasSchedule=false 表示车端没有预约项。
+     */
+    fun getScheduledAirConditioning(): ScheduledAcState? {
+        requireVin()
+        try {
+            ensureFreshOldToken()
+        } catch (_: Exception) {}
+        val route = ensureRoute()
+        val params = LinkedHashMap<String, String>()
+        params["cmdid"] = Commands.SCHEDULED_AC_CMD_ID
+        params["carvin"] = session.selectedVin
+
+        val signedBody = oldSignedParams(params)
+        val headers = combinedAppAndGatewayHeaders(signedBody, needLogin = true)
+        val host = if (route.appCenter.isNotBlank()) route.appCenter else route.appRegion
+        val candidates = listOf(
+            "https://appgateway.leapmotor.com/carownerservice/v3/api/appremotectl/getappointment",
+            "$host/carownerservice/v3/api/appremotectl/getappointment"
+        ).distinct()
+
+        var lastException: Exception? = null
+        for (url in candidates) {
+            try {
+                val resp = http(url, headers = headers, query = signedBody)
+                val result = resp.opt("result")
+                if (result != null && result != JSONObject.NULL && result.toString() != "0") {
+                    return null
+                }
+                return Commands.parseScheduledAc(resp.opt("data"))
+            } catch (e: Exception) {
+                lastException = e
+            }
+        }
+        lastException?.let { throw it }
+        return null
+    }
+
     // ---------------------------------------------------------------- 内部
 
     private fun gatewayFetch(

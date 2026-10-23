@@ -35,32 +35,31 @@ object ThemeManager {
     }
 
     /**
-     * 查询指定车辆是否支持 3D 车模。
+     * 查询指定车辆是否支持 3D 车模（只读，无任何写入副作用）。
      * 优先读取持久化配置；若未配置过，则结合缓存元数据与已知车型判定。
      */
     fun isVehicle3DSupported(context: Context?, vin: String?): Boolean {
-        if (context != null && !vin.isNullOrBlank()) {
-            val sp = context.getSharedPreferences(PREFS_3D_SUPPORT, Context.MODE_PRIVATE)
-            if (sp.contains("$KEY_3D_SUPPORTED_PREFIX$vin")) {
-                val stored = sp.getBoolean("$KEY_3D_SUPPORTED_PREFIX$vin", true)
-                isCurrentVehicle3DSupported = stored
-                return stored
-            }
-            val meta = VehicleImageCache.getCachedMeta(context, vin)
-            if (meta != null) {
-                val supported = !meta.h5Key.isNullOrBlank()
-                sp.edit().putBoolean("$KEY_3D_SUPPORTED_PREFIX$vin", supported).apply()
-                isCurrentVehicle3DSupported = supported
-                return supported
-            }
-            val carType = SessionStore(context).load().selectedCarType
-            if (carType.contains("T03", ignoreCase = true) || carType.contains("S01", ignoreCase = true)) {
-                sp.edit().putBoolean("$KEY_3D_SUPPORTED_PREFIX$vin", false).apply()
-                isCurrentVehicle3DSupported = false
-                return false
-            }
+        if (context == null || vin.isNullOrBlank()) {
+            return isCurrentVehicle3DSupported
         }
-        return isCurrentVehicle3DSupported
+        val sp = context.getSharedPreferences(PREFS_3D_SUPPORT, Context.MODE_PRIVATE)
+        val key = "$KEY_3D_SUPPORTED_PREFIX$vin"
+        if (sp.contains(key)) {
+            return sp.getBoolean(key, true)
+        }
+        val meta = VehicleImageCache.getCachedMeta(context, vin)
+        if (meta != null) {
+            return !meta.h5Key.isNullOrBlank()
+        }
+        val carType = SessionStore(context).loadSelectedCarType()
+        return !(carType.contains("T03", ignoreCase = true) || carType.contains("S01", ignoreCase = true))
+    }
+
+    /**
+     * 切换当前车辆时同步全局变量，供无 VIN 上下文的调用方（主题色调判定）使用。
+     */
+    fun updateCurrentVehicle3DSupported(context: Context?, vin: String?) {
+        isCurrentVehicle3DSupported = isVehicle3DSupported(context, vin)
     }
 
     /**

@@ -8,7 +8,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -32,7 +31,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -43,7 +41,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -56,10 +53,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalDensity
@@ -1305,14 +1300,16 @@ private fun ScheduledPreheatDialog(
 // ----------------------------------------------------------------
 
 @Composable
-private fun TimeWheelPicker(
+internal fun TimeWheelPicker(
     timeString: String,
     onTimeChanged: (String) -> Unit,
     modifier: Modifier = Modifier,
-    prefix: String? = null
+    prefix: String? = null,
+    minuteStep: Int = 5
 ) {
     val hours = remember { (0..23).map { "%02d".format(it) } }
-    val minutes = remember { (0..55 step 5).map { "%02d".format(it) } }
+    val step = minuteStep.coerceIn(1, 30)
+    val minutes = remember(step) { (0..59 step step).map { "%02d".format(it) } }
 
     val currentHour = timeString.substringBefore(":").trim().toIntOrNull() ?: 0
     val currentMin = timeString.substringAfter(":").trim().toIntOrNull() ?: 0
@@ -1465,7 +1462,7 @@ private fun WheelPickerColumn(
 // ----------------------------------------------------------------
 
 @Composable
-private fun OfficialDayPill(
+internal fun OfficialDayPill(
     label: String,
     selected: Boolean,
     onClick: () -> Unit,

@@ -5,44 +5,34 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.leapauto.app.R
 import com.leapauto.app.bluetooth.BleCalibration
 import com.leapauto.app.bluetooth.BlePassiveConfiguration
 import com.leapauto.app.ui.theme.statusGood
@@ -337,40 +327,4 @@ private fun BluetoothPassiveSwitchRow(
             stateDescription = if (checked) "已开启" else "已关闭"
         )
     }
-}
-
-@Composable
-fun BluetoothConfigurationConfirmation(
-    configuration: BlePassiveConfiguration,
-    onDismiss: () -> Unit,
-    onConfirm: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        modifier = solidDialogModifier(),
-        containerColor = MaterialTheme.colorScheme.surface,
-        tonalElevation = 0.dp,
-        shape = RoundedCornerShape(24.dp),
-        title = { Text(if (configuration.enabled) "确认后台蓝牙设置" else "确认关闭后台蓝牙") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                if (configuration.enabled) {
-                    Text("启用后会显示后台连接通知，并在后台连接车辆。")
-                    val actions = buildList {
-                        if (configuration.autoUnlock) add("靠近车辆时自动解锁")
-                        if (configuration.autoLock) add("远离车辆时自动锁车")
-                    }
-                    if (actions.isEmpty()) {
-                        Text("本次未开启靠近自动解锁或远离自动锁车。")
-                    } else {
-                        Text("本次将向车辆同步：${actions.joinToString("、")}。")
-                    }
-                } else {
-                    Text("关闭设置经车辆确认后，将停止后台连接。同步完成前，车辆可能保留原来的自动操作设置。")
-                }
-            }
-        },
-        confirmButton = { TextButton(onClick = onConfirm) { Text("确认保存") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
-    )
 }

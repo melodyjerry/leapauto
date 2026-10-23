@@ -60,7 +60,7 @@ it. Do not edit generated files under `app/build/`, `.gradle/`, or `.kotlin/`.
 | `design/零跑智控-设计规范.md`                                                | 全局设计规范：智能座舱级·真微晶毛玻璃（Liquid Crystal Glassmorphism）规范，涵盖双对角材质、极光折射、边框高光、排版字号、弹窗抽屉与桌面小组件标准。所有界面开发必须严格遵守。 |
 | `API/`                                                                       | Consolidated API documentation: `API/API.md` (verified spec).                                                                                            |
 | `scripts/package-release.ps1`                                                | Signed Release packaging with a hard 10 MiB delivery-size gate.                                                                                                                                                          |
-| `scripts/publish-pgyer.ps1`                                                  | Local signed Release packaging and PGYER CLI upload.                                                                                                                                                                     |
+| `scripts/publish-pgyer.ps1`                                                  | Local signed Release packaging and PGYER CLI upload, with environment-first API key resolution, release-note fallback, and idempotent version deduplication. Also used by CI publishing. |
 
 The app has no embedded map SDK. Vehicle-location navigation is delegated to an
 installed external map only after an explicit user action.
@@ -323,14 +323,39 @@ The integrated PGYER entrypoint is:
 .\scripts\publish-pgyer.ps1
 .\scripts\publish-pgyer.ps1 -UpdateDescription "更新内容"
 .\scripts\publish-pgyer.ps1 -SkipBuild -UpdateDescription "已验证的更新内容"
+.\scripts\publish-pgyer.ps1 -SkipBuild -ApkPath "app/build/distributions/release/零跑智控-<version>.apk" -Force
 ```
 
-The script reads `PGYER_API_KEY` from `local.properties`, requires the `pgyer` CLI
-(`npm install -g @pgyer/cli`), uploads only the standardized signed Release APK,
-and restores the process environment after upload. Verify the public page
-`https://www.pgyer.com/lingpaozhikong` after an authorized publish. Never print API
-keys, User Keys, signing passwords, tokens, VINs, PINs, raw responses, or locations
-in documentation or logs.
+The script resolves `PGYER_API_KEY` from the environment first and falls back to
+`local.properties`; it requires the `pgyer` CLI (`npm install -g @pgyer/cli`),
+uploads only the standardized signed Release APK, and restores the process
+environment after upload. When `-UpdateDescription` is omitted it falls back to
+`PGYER_UPDATE_DESCRIPTION` and then to `currentReleaseNotes` in
+`AppReleaseInfo.kt`. Publishing is idempotent: if the shortcut already exposes
+the local `apkVersionName`/`versionCode`, the upload is skipped unless `-Force`
+is passed. Verify the public page `https://www.pgyer.com/lingpaozhikong` after
+an authorized publish. Never print API keys, User Keys, signing passwords,
+tokens, VINs, PINs, raw responses, or locations in documentation or logs.
+
+### GitHub Actions PGYER publishing
+
+`.github/workflows/release.yml` publishes the signed Release APK to PGYER after
+the unit-test gate, the packaging step, the signature verification, and the
+GitHub Release creation succeed. The workflow installs `@pgyer/cli@0.2.0`
+(pinned, because `0.1.x` resets the install type to public) and calls
+`.\scripts\publish-pgyer.ps1 -SkipBuild -ApkPath <apk> -Shortcut lingpaozhikong`.
+
+Required repository secrets:
+
+| Secret | Purpose |
+| --- | --- |
+| `RELEASE_STORE_FILE_BASE64`, `RELEASE_STORE_PASSWORD`, `RELEASE_KEY_ALIAS`, `RELEASE_KEY_PASSWORD` | Release signing material |
+| `PGYER_API_KEY` | PGYER upload credential; when it is missing the workflow warns and skips the publish step |
+
+The publish step only runs for a signed build, skips silently when the same
+version is already published, and fails the job on upload errors so the run can
+be retried safely. CI publishes are still subject to the same unit-test gate
+and release-note independence rules as local publishing.
 
 ## Security and Data Boundaries
 
@@ -388,6 +413,7 @@ project’s delivery work. Do not reset or discard unrelated user changes.
 - 用户说“打包”或“3D 包”时，生成唯一受支持的 3D 签名 Release APK。Lite 构建已移除。
 - 用户说“发布”时，默认发布最新 3D 签名 Release APK 到蒲公英。
 - **打包与发布前测试门禁**：在执行打包（`.\scripts\package-release.ps1`）或发布（`.\scripts\publish-pgyer.ps1`）前，必须**全量执行并通过全部单元测试**（`.\gradlew.bat :app:testDebugUnitTest`），确保测试全部通过（100% SUCCESS）；严禁在测试未执行或有任何测试失败的情况下进行打包或发布。
+- **CI 自动发布到蒲公英**：`.github/workflows/release.yml` 在单测门禁、签名打包、签名校验与 GitHub Release 全部成功后，会自动将签名 Release APK 发布到蒲公英（需在仓库 Secrets 配置 `PGYER_API_KEY`）。仅签名包可发布；线上已是同版本时自动跳过；发布失败会让流水线标红以便重跑。
 - **功能与测试同步约束**：
   - 新增功能必须同步添加对应的单元测试；
   - 修改既有功能或业务逻辑必须同步更新已有单元测试，确保测试覆盖度并防止逻辑回归。

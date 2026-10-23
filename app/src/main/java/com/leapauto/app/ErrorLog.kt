@@ -3,7 +3,6 @@ package com.leapauto.app
 import java.time.Instant
 import java.util.ArrayDeque
 import java.util.concurrent.locks.ReentrantReadWriteLock
-import kotlin.concurrent.read
 import kotlin.concurrent.write
 
 enum class ErrorLogCategory { API_FAILURE, CONTROL_FAILURE, LOGIN_FAILURE, SESSION_EXPIRED, PARSE_FAILURE, PAGE_ERROR, CONTROL_LOG }

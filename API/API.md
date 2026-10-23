@@ -695,6 +695,41 @@
 
 ---
 
+### 接口 16.1：定时空调预约（`cmdid=171`）
+* **设置 URL**: `POST {appCenter}/carownerservice/v3/api/appremotectl/appointment`
+* **设置 Payload**（官方抓包 `[681]`）:
+  ```json
+  {
+    "controls": [
+      {
+        "circle": "in",
+        "days": [1, 3, 4],
+        "mode": "hot",
+        "on": "1",
+        "operate": "manual",
+        "position": "all",
+        "set_id": "android_{deviceId}{epochMillis}00",
+        "start_time": "2026-10-22 19:54:00",
+        "temperature": "32",
+        "update_time": "{epochMillis}",
+        "windlevel": "7",
+        "wshld": "1"
+      }
+    ]
+  }
+  ```
+* **查询 URL**: `GET {appCenter}/carownerservice/v3/api/appremotectl/getappointment?carvin={vin}&cmdid=171&deviceID=...&nonce=...&signStr=...&timespan=...`
+  - `data` 为 JSON 字符串，内容同样是 `{"controls":[...]}`；`controls` 为空表示车端没有预约项。
+* **字段说明**:
+  - `days`：`0`=周日，`1`=周一 … `6`=周六（与 `cmdid=161` 一致）。
+  - `mode`：`hot`=制热，`cold`=制冷，`nohotcold`=自动/不强制冷热。
+  - `on`：开启预约发送 `1`。取消预约发送 `state={"controls":[]}`，不发送 `on="0"` 的预约项，也不携带 `set_id`。
+  - 需要 4 位操作密码（`oppwd`）。
+* **客户端方法**: `LeapmotorApi.setScheduledAirConditioning(...)` / `LeapmotorApi.getScheduledAirConditioning()`
+* **取消验证**: 官方取消操作抓包 `cancel/[332]` 使用相同 POST 接口与 `cmdid=171`，`state={"controls":[]}`；返回 `result=0, code=0`。随后 `[334]` 查询返回 `data` 为 `{"controls":[]}`，确认预约已清空。客户端仅在提交成功且回读列表为空后提示取消成功；本地保留时间、星期等偏好供下次开启使用。
+
+---
+
 ## 八、行驶里程与能耗数据分析 API
 
 ### 接口 17：历史累计行驶里程与能耗明细

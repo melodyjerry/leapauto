@@ -1,8 +1,12 @@
 package com.leapauto.app
 
 import android.util.Base64
+import org.json.JSONArray
 import org.json.JSONObject
-import java.math.BigDecimal
+import java.time.Instant
+import java.time.LocalDateTime
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import kotlin.math.roundToInt
 
 data class OldAuth(
@@ -688,7 +692,7 @@ object ClimateOptimisticUpdates {
     fun acOn() = ClimateOptimisticUpdate(
         acSwitch = true,
         acSetting = "${Commands.DEFAULT_AC_TEMPERATURE} °C",
-        windLevel = 3,
+        windLevel = 2,
         circle = AirCircle.INNER,
         windshieldDefrost = false
     )
@@ -1008,13 +1012,49 @@ object ClimateTemperatureToneResolver {
     }
 }
 
+/** 定时空调（cmdid=171）的冷热模式，取值与 cmdid=170 一致的 wire 值。 */
+enum class ScheduledAcMode(val wireValue: String, val label: String) {
+    AUTO("nohotcold", "自动"),
+    COLD("cold", "制冷"),
+    HOT("hot", "制热");
+
+    companion object {
+        fun fromWire(value: String?): ScheduledAcMode? =
+            entries.firstOrNull { it.wireValue == value }
+
+        fun fromName(value: String?): ScheduledAcMode =
+            entries.firstOrNull { it.name == value } ?: HOT
+    }
+}
+
+/**
+ * 定时空调预约项。字段对应官方抓包 `cmdid=171` 的 controls[0]：
+ * circle/days/mode/on/operate/position/set_id/start_time/temperature/update_time/windlevel/wshld。
+ */
+data class ScheduledAcPlan(
+    val enabled: Boolean = false,
+    val startTime: String = "07:30",
+    val days: String = "1,1,1,1,1,1,1",
+    val temperatureC: Int = 32,
+    val windLevel: Int = 7,
+    val mode: ScheduledAcMode = ScheduledAcMode.HOT,
+    val circle: AirCircle = AirCircle.INNER,
+    val windshieldDefogging: Boolean = true
+)
+
+/** 查询结果：hasSchedule=false 表示车端当前没有预约项，而不是查询失败。 */
+data class ScheduledAcState(
+    val hasSchedule: Boolean,
+    val plan: ScheduledAcPlan
+)
+
 object Commands {
     const val MIN_AC_TEMPERATURE = 16
     const val MAX_AC_TEMPERATURE = 32
     const val DEFAULT_AC_TEMPERATURE = 24
 
     const val AC_ON_STATE =
-        """{"operate":"auto","temperature":"24","windlevel":"3","mode":"cold","circle":"in","wshld":"1","position":"all"}"""
+        """{"operate":"auto","temperature":"24","windlevel":"2","mode":"nohotcold","circle":"in","wshld":"1","position":"all"}"""
     const val AC_OFF_STATE =
         """{"operate":"off","temperature":"24","windlevel":"3","mode":"nohotcold","circle":"in","wshld":"1","position":"all"}"""
     const val QUICK_COOL_STATE =
@@ -1206,11 +1246,118 @@ object Commands {
         )
     }
 
+    const val SCHEDULED_AC_CMD_ID = "171"
+
+    /** 官方抓包 `[681]` 的 cmdid=171 预约空调 payload。 */
+    fun buildScheduledAc(
+        plan: ScheduledAcPlan,
+        deviceId: String,
+        nowMillis: Long = System.currentTimeMillis()
+    ): ControlCommand {
+        if (!plan.enabled) {
+            return ControlCommand(SCHEDULED_AC_CMD_ID, """{"controls":[]}""", "取消定时空调")
+        }
+        val temperature = plan.temperatureC.coerceIn(MIN_AC_TEMPERATURE, MAX_AC_TEMPERATURE)
+        val windLevel = plan.windLevel.coerceIn(1, 7)
+        val item = JSONObject().apply {
+            put("on", if (plan.enabled) "1" else "0")
+            put("set_id", "android_${deviceId}${nowMillis}00")
+            put("start_time", scheduledAcStartTime(plan.startTime, nowMillis))
+            put("update_time", nowMillis.toString())
+            put(
+                "days",
+                JSONArray(
+                    ChargePlanCyclesHelper.toScheduleDaysIntList(
+                        ChargePlanCyclesHelper.parseToDaySet(plan.days)
+                    )
+                )
+            )
+            put("temperature", temperature.toString())
+            put("windlevel", windLevel.toString())
+            put("mode", plan.mode.wireValue)
+            put("circle", plan.circle.wireValue)
+            put("wshld", if (plan.windshieldDefogging) "1" else "0")
+            put("position", "all")
+            put("operate", "manual")
+        }
+        val state = JSONObject().put("controls", JSONArray().put(item))
+        return ControlCommand(
+            SCHEDULED_AC_CMD_ID,
+            state.toString(),
+            if (plan.enabled) "定时空调已设置" else "定时空调已关闭"
+        )
+    }
+
+    /**
+     * `getappointment` 返回的 data 是 JSON 字符串；controls 为空表示车端没有预约项。
+     * 解析失败返回 null，调用方应保留本地设置而不是清空。
+     */
+    fun parseScheduledAc(payload: Any?): ScheduledAcState? {
+        val text = when (payload) {
+            null, JSONObject.NULL -> return null
+            is JSONObject -> payload.toString()
+            is JSONArray -> return null
+            else -> payload.toString()
+        }.trim()
+        if (text.isBlank()) return null
+        val root = runCatching { JSONObject(text) }.getOrNull() ?: return null
+        val controls = root.optJSONArray("controls") ?: return null
+        if (controls.length() == 0) {
+            return ScheduledAcState(hasSchedule = false, plan = ScheduledAcPlan())
+        }
+        val item = controls.optJSONObject(0) ?: return null
+        val daySet = item.optJSONArray("days")?.let { array ->
+            (0 until array.length()).mapNotNull { index ->
+                array.optInt(index, -1).takeIf { it in 0..6 }
+            }.map { if (it == 0) 7 else it }.toSet()
+        }.orEmpty()
+        val startTime = item.optString("start_time")
+            .let { Regex("(\\d{1,2}):(\\d{2})").find(it) }
+            ?.let { "%02d:%s".format(it.groupValues[1].toIntOrNull() ?: 7, it.groupValues[2]) }
+            ?: ScheduledAcPlan().startTime
+        return ScheduledAcState(
+            hasSchedule = true,
+            plan = ScheduledAcPlan(
+                enabled = item.optString("on") == "1",
+                startTime = startTime,
+                days = if (daySet.isEmpty()) {
+                    ScheduledAcPlan().days
+                } else {
+                    ChargePlanCyclesHelper.toVehicleMask(daySet)
+                },
+                temperatureC = item.optString("temperature").toIntOrNull()
+                    ?.coerceIn(MIN_AC_TEMPERATURE, MAX_AC_TEMPERATURE)
+                    ?: ScheduledAcPlan().temperatureC,
+                windLevel = item.optString("windlevel").toIntOrNull()
+                    ?.coerceIn(1, 7)
+                    ?: ScheduledAcPlan().windLevel,
+                mode = ScheduledAcMode.fromWire(item.optString("mode")) ?: ScheduledAcMode.HOT,
+                circle = if (item.optString("circle") == AirCircle.OUTER.wireValue) {
+                    AirCircle.OUTER
+                } else {
+                    AirCircle.INNER
+                },
+                windshieldDefogging = item.optString("wshld") == "1"
+            )
+        )
+    }
+
+    /** 预约时间取下一次发生时刻：今天已过则顺延到明天。 */
+    internal fun scheduledAcStartTime(time: String, nowMillis: Long): String {
+        val now = Instant.ofEpochMilli(nowMillis).atZone(ZoneId.systemDefault())
+        val parts = time.split(":")
+        val hour = parts.getOrNull(0)?.trim()?.toIntOrNull()?.coerceIn(0, 23) ?: 7
+        val minute = parts.getOrNull(1)?.trim()?.toIntOrNull()?.coerceIn(0, 59) ?: 30
+        var target: LocalDateTime = now.toLocalDate().atTime(hour, minute)
+        if (!target.isAfter(now.toLocalDateTime())) target = target.plusDays(1)
+        return target.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:00"))
+    }
+
     fun climateExpectation(name: String): ClimateTelemetryExpectation? = when (name) {
         "acOn" -> ClimateTelemetryExpectation(
             acSwitch = true,
             temperatureC = DEFAULT_AC_TEMPERATURE,
-            windLevel = 3,
+            windLevel = 2,
             circle = AirCircle.INNER,
             windshieldDefogging = false
         )
@@ -1502,6 +1649,7 @@ object QuickCommandExecutionPolicy {
             "sunroofGroup" -> activeCmd.startsWith("sunroof")
             "sentry" -> activeCmd.startsWith("sentry")
             "fridge" -> activeCmd.startsWith("fridge")
+            "batteryPreheat" -> activeCmd == "batteryPreheat" || activeCmd == "batteryPreheatOff"
             else -> activeCmd == commandName
         }
     }

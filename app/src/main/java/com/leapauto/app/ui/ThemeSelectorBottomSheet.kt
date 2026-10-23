@@ -156,12 +156,6 @@ fun ThemeSelectorBottomSheet(
                     val isApplying = applyingThemeId == theme.themeId
                     val isBusy = isDownloading || isApplying
 
-                    val displayName = when {
-                        theme.themeId == ThemeManager.ORIGINAL_SKYBOX_THEME_ID || theme.name == "默认主题" || theme.name == "原厂天幕" -> "层峦叠嶂"
-                        theme.themeId == ThemeManager.DEFAULT_THEME_ID || theme.name == "雾川雪镜" -> "雾川雪境"
-                        else -> theme.name
-                    }
-
                     Surface(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -404,7 +398,7 @@ fun ThemeSelectorBottomSheet(
     if (showSwitchSuccessDialog) {
         AlertDialog(
             onDismissRequest = { showSwitchSuccessDialog = false },
-            modifier = solidDialogModifier(),
+            modifier = Modifier.solidDialogModifier(),
             containerColor = MaterialTheme.colorScheme.surface,
             tonalElevation = 0.dp,
             shape = RoundedCornerShape(24.dp),

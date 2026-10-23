@@ -11,11 +11,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.DrawableRes
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.EnterTransition
-import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.animateColor
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.animateColorAsState
 import com.leapauto.app.bluetooth.BleConnectionPhase
 import com.leapauto.app.bluetooth.BleConnectionState
@@ -32,8 +28,6 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
@@ -57,10 +51,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -72,9 +64,9 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.statusBars
@@ -91,22 +83,16 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.SheetValue
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -116,7 +102,6 @@ import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TooltipBox
@@ -126,7 +111,6 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import android.graphics.Bitmap
 import com.leapauto.app.ChassisParkingPhoto
@@ -155,7 +139,6 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.FilterQuality
-import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.Path
@@ -168,9 +151,7 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -180,7 +161,6 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -223,21 +203,21 @@ import com.leapauto.app.ExternalMapLauncher
 import com.leapauto.app.GeetestCaptchaResult
 import com.leapauto.app.GeetestChallenge
 import com.leapauto.app.GeocodedAddress
-import com.leapauto.app.HomeClimateTogglePresentation
 import com.leapauto.app.HomeClimateTogglePresentationMapper
 import com.leapauto.app.HvacCapability
 import com.leapauto.app.HvacOperation
 import com.leapauto.app.MainNavigationTabs
 import com.leapauto.app.PgyerRelease
 import com.leapauto.app.RearSeatComfortPolicy
+import com.leapauto.app.ScheduledAcPlan
 import com.leapauto.app.VehicleDrivingSafetyPolicy
+import com.leapauto.app.BatteryPreheatGatePolicy
 import com.leapauto.app.QuickCommandExecutionPolicy
 import com.leapauto.app.QuickCommandOrderPolicy
 import com.leapauto.app.SunshadeMenuPolicy
 import com.leapauto.app.SunroofMenuPolicy
 import com.leapauto.app.VehicleOtaState
 import com.leapauto.app.R
-import com.leapauto.app.SUPPORTED_VEHICLE_MODELS
 import com.leapauto.app.SentryModeControlPolicy
 import com.leapauto.app.SessionExpiredDialogAction
 import com.leapauto.app.SessionExpiredDialogPolicy
@@ -255,7 +235,6 @@ import com.leapauto.app.VehicleImageCache
 import com.leapauto.app.Vehicle
 import com.leapauto.app.VehicleLocationAvailability
 import com.leapauto.app.VehicleLocationMapDomain
-import com.leapauto.app.VehicleLocationMapModel
 import com.leapauto.app.VehicleLocationMapState
 import com.leapauto.app.VehicleLocationSnapshot
 import com.leapauto.app.VehicleLocationSummary
@@ -275,7 +254,6 @@ import java.util.Locale
 import kotlin.math.roundToInt
 
 private const val MAP_ACTION_NAVIGATE = "navigate"
-private const val SMS_RESEND_COUNTDOWN_SECONDS = 60
 
 data class Cmd(val name: String, val label: String, @DrawableRes val iconRes: Int)
 
@@ -354,8 +332,11 @@ fun LeapAutoScreen(
     scheduledPreheatEnabled: Boolean = false,
     scheduledPreheatStartTime: String = "23:00",
     scheduledPreheatDays: String = "1,1,1,1,1,1,1",
+    scheduledAcPlan: ScheduledAcPlan = ScheduledAcPlan(),
     onApplyChargingSettings: (Boolean, Int, Boolean, String, String, Boolean, Int, String) -> Unit = { _, _, _, _, _, _, _, _ -> },
     onApplyScheduledPreheat: (Boolean, String, String) -> Unit = { _, _, _ -> },
+    onApplyScheduledAc: (ScheduledAcPlan) -> Unit = {},
+    onLoadScheduledAc: suspend () -> ScheduledAcPlan = { error("预约查询不可用") },
     onRefreshChargingSettings: () -> Unit = {},
     showPowerTypeDialog: Boolean = false,
     onConfirmPowerType: (SessionStore.VehiclePowerType) -> Unit = {},
@@ -509,7 +490,7 @@ fun LeapAutoScreen(
     if (loggedIn && pinSetupInProgress && !showSessionExpiredDialog) {
         AlertDialog(
             onDismissRequest = onCancelPinSetup,
-            modifier = solidDialogModifier(),
+            modifier = Modifier.solidDialogModifier(),
             containerColor = MaterialTheme.colorScheme.surface,
             tonalElevation = 0.dp,
             shape = RoundedCornerShape(24.dp),
@@ -587,7 +568,7 @@ fun LeapAutoScreen(
                     onSessionExpiredConfirmed()
                 }
             },
-            modifier = solidDialogModifier(),
+            modifier = Modifier.solidDialogModifier(),
             containerColor = MaterialTheme.colorScheme.surface,
             tonalElevation = 0.dp,
             shape = RoundedCornerShape(24.dp),
@@ -712,7 +693,7 @@ fun LeapAutoScreen(
     if (showLogoutConfirmationDialog) {
         AlertDialog(
             onDismissRequest = { showLogoutConfirmationDialog = false },
-            modifier = solidDialogModifier(),
+            modifier = Modifier.solidDialogModifier(),
             containerColor = MaterialTheme.colorScheme.surface,
             tonalElevation = 0.dp,
             shape = RoundedCornerShape(24.dp),
@@ -937,7 +918,10 @@ fun LeapAutoScreen(
                         bluetoothState = bluetoothState,
                         bluetoothKeyFeatureEnabled = bluetoothKeyFeatureEnabled,
                         selectedThemeId = selectedThemeId,
-                        onOpenBluetoothKey = onOpenBluetoothKey
+                        onOpenBluetoothKey = onOpenBluetoothKey,
+                        scheduledAcPlan = scheduledAcPlan,
+                        onApplyScheduledAc = onApplyScheduledAc,
+                        onLoadScheduledAc = onLoadScheduledAc
                     )
                 }
 
@@ -978,7 +962,10 @@ fun LeapAutoScreen(
                                 onDismissControlFeedback = onDismissControlFeedback,
                                 onRefresh = onRefresh,
                                 onControl = onControl,
-                                onApplyClimateSettings = onApplyClimateSettings
+                                onApplyClimateSettings = onApplyClimateSettings,
+                                scheduledAcPlan = scheduledAcPlan,
+                                onApplyScheduledAc = onApplyScheduledAc,
+                                onLoadScheduledAc = onLoadScheduledAc
                             )
                         }
                         ScreenDestination.ACCOUNT -> {
@@ -1333,7 +1320,10 @@ private fun HomeContent(
     bluetoothState: BleConnectionState = BleConnectionState(),
     bluetoothKeyFeatureEnabled: Boolean = false,
     selectedThemeId: String = ThemeManager.DEFAULT_THEME_ID,
-    onOpenBluetoothKey: (() -> Unit)? = null
+    onOpenBluetoothKey: (() -> Unit)? = null,
+    scheduledAcPlan: ScheduledAcPlan = ScheduledAcPlan(),
+    onApplyScheduledAc: (ScheduledAcPlan) -> Unit = {},
+    onLoadScheduledAc: suspend () -> ScheduledAcPlan = { error("预约查询不可用") }
 ) {
     var showAddressNavigationDialog by rememberSaveable { mutableStateOf(false) }
     var showParkingDetailDialog by rememberSaveable { mutableStateOf(false) }
@@ -1561,7 +1551,10 @@ private fun HomeContent(
             onControl = onControl,
             onApplyClimateSettings = onApplyClimateSettings,
             controlFeedback = controlFeedback,
-            onDismissControlFeedback = onDismissControlFeedback
+            onDismissControlFeedback = onDismissControlFeedback,
+            scheduledAcPlan = scheduledAcPlan,
+            onApplyScheduledAc = onApplyScheduledAc,
+            onLoadScheduledAc = onLoadScheduledAc
         )
     }
 }
@@ -1890,7 +1883,7 @@ private fun BluetoothEnableWarningDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        modifier = solidDialogModifier(shape = RoundedCornerShape(24.dp)),
+        modifier = Modifier.solidDialogModifier(shape = RoundedCornerShape(24.dp)),
         containerColor = MaterialTheme.colorScheme.surface,
         tonalElevation = 0.dp,
         shape = RoundedCornerShape(24.dp),
@@ -1954,7 +1947,7 @@ private fun PowerTypeConfirmationDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        modifier = solidDialogModifier(shape = RoundedCornerShape(24.dp)),
+        modifier = Modifier.solidDialogModifier(shape = RoundedCornerShape(24.dp)),
         containerColor = MaterialTheme.colorScheme.surface,
         tonalElevation = 0.dp,
         shape = RoundedCornerShape(24.dp),
@@ -2219,7 +2212,7 @@ private fun ModifyNicknameDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        modifier = solidDialogModifier(shape = RoundedCornerShape(24.dp)),
+        modifier = Modifier.solidDialogModifier(shape = RoundedCornerShape(24.dp)),
         containerColor = MaterialTheme.colorScheme.surface,
         tonalElevation = 0.dp,
         shape = RoundedCornerShape(24.dp),
@@ -2574,7 +2567,7 @@ private fun VersionUpdatePromptDialog(
     val isDownloading = downloadProgress != null && downloadProgress < 100
     AlertDialog(
         onDismissRequest = { if (!isDownloading) onDismiss() },
-        modifier = solidDialogModifier(),
+        modifier = Modifier.solidDialogModifier(),
         containerColor = MaterialTheme.colorScheme.surface,
         tonalElevation = 0.dp,
         shape = RoundedCornerShape(24.dp),
@@ -3187,7 +3180,7 @@ private fun VehicleCustomImageCard(
     if (showResetConfirmDialog) {
         AlertDialog(
             onDismissRequest = { showResetConfirmDialog = false },
-            modifier = solidDialogModifier(),
+            modifier = Modifier.solidDialogModifier(),
             containerColor = MaterialTheme.colorScheme.surface,
             tonalElevation = 0.dp,
             shape = RoundedCornerShape(24.dp),
@@ -3248,7 +3241,7 @@ private fun VehicleCustomImageGuideDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        modifier = solidDialogModifier(),
+        modifier = Modifier.solidDialogModifier(),
         containerColor = MaterialTheme.colorScheme.surface,
         tonalElevation = 0.dp,
         shape = RoundedCornerShape(24.dp),
@@ -3770,11 +3763,11 @@ private fun Widget4x2ActionsDialog(
     onDismiss: () -> Unit,
     onConfirm: (List<String>) -> Unit
 ) {
-    var editingActions by remember(currentActions) { mutableStateOf(currentActions.toMutableList()) }
+    var editingActions by remember(currentActions) { mutableStateOf(currentActions.toList()) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        modifier = solidDialogModifier(),
+        modifier = Modifier.solidDialogModifier(),
         containerColor = MaterialTheme.colorScheme.surface,
         tonalElevation = 0.dp,
         shape = RoundedCornerShape(24.dp),
@@ -3876,7 +3869,7 @@ private fun Widget4x2ActionsDialog(
                                         IconButton(
                                             onClick = {
                                                 if (editingActions.size > 4) {
-                                                    editingActions = editingActions.filterIndexed { i, _ -> i != index }.toMutableList()
+                                                    editingActions = editingActions.filterIndexed { i, _ -> i != index }
                                                 }
                                             },
                                             enabled = editingActions.size > 4,
@@ -3915,7 +3908,7 @@ private fun Widget4x2ActionsDialog(
                                         .weight(1f)
                                         .clickable(enabled = canAdd) {
                                             if (canAdd) {
-                                                editingActions = (editingActions + action.id).toMutableList()
+                                                editingActions = (editingActions + action.id).toList()
                                             }
                                         }
                                 ) {
@@ -3961,7 +3954,7 @@ private fun Widget4x2ActionsDialog(
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 TextButton(
                     onClick = {
-                        editingActions = Widget4x2ActionPolicy.DEFAULT_ACTIONS.toMutableList()
+                        editingActions = Widget4x2ActionPolicy.DEFAULT_ACTIONS.toList()
                     }
                 ) {
                     Text("恢复默认")
@@ -4145,10 +4138,9 @@ internal fun Modifier.frostedGlassCard(
     }
 
 @Composable
-internal fun solidDialogModifier(
+internal fun Modifier.solidDialogModifier(
     shape: androidx.compose.ui.graphics.Shape = RoundedCornerShape(24.dp)
-): Modifier = Modifier
-    .clip(shape)
+): Modifier = clip(shape)
     .border(
         width = 0.8.dp,
         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f),
@@ -4198,7 +4190,9 @@ fun VehicleHero(
     }
     val h5Key = cachedMeta?.h5Key
     val srcKey = cachedMeta?.srcKey
-    val is3dSupported = ThemeManager.isVehicle3DSupported(context, vehicleVin)
+    val is3dSupported = remember(vehicleVin, vehicleImageVersion) {
+        ThemeManager.isVehicle3DSupported(context, vehicleVin)
+    }
     var is3DReady by remember(h5Key, srcKey) {
         mutableStateOf(is3dSupported && h5Key != null && CarModel3DManager.isModelReady(context, h5Key, srcKey))
     }
@@ -4307,8 +4301,8 @@ fun VehicleHero(
     // 避免老款 2D 车型在深色模式下的深色文字与暗底撞色看不清
     val hasThemeBg = activeThemeBgBitmap != null && (!is3dSupported || selectedThemeId != ThemeManager.ORIGINAL_SKYBOX_THEME_ID)
     val isHeroDark = when {
-        hasThemeBg -> ThemeManager.isHeroBackgroundDark(selectedThemeId, isDark)
-        show3D -> ThemeManager.isHeroBackgroundDark(selectedThemeId, isDark)
+        hasThemeBg -> ThemeManager.isHeroBackgroundDark(selectedThemeId, isDark, context, vehicleVin)
+        show3D -> ThemeManager.isHeroBackgroundDark(selectedThemeId, isDark, context, vehicleVin)
         else -> isDark
     }
     val heroPrimaryTextColor = if (isHeroDark) Color.White else Color(0xFF141923)
@@ -4330,7 +4324,7 @@ fun VehicleHero(
                     val ok = ThemeManager.syncThemePackage(context, api, themeObj)
                     android.util.Log.i("ThemeDebug", "HomeContent LaunchedEffect sync result=$ok")
                     if (ok) {
-                        val downloaded = ThemeManager.load3dBgBitmap(context, selectedThemeId)
+                        val downloaded = ThemeManager.load3dBgBitmap(context, selectedThemeId, vehicleVin)
                         android.util.Log.i("ThemeDebug", "HomeContent LaunchedEffect downloaded=${downloaded != null}")
                         if (downloaded != null) {
                             kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
@@ -5294,7 +5288,7 @@ private fun VehicleSelectorDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        modifier = solidDialogModifier(),
+        modifier = Modifier.solidDialogModifier(),
         containerColor = MaterialTheme.colorScheme.surface,
         tonalElevation = 0.dp,
         shape = RoundedCornerShape(24.dp),
@@ -5707,7 +5701,7 @@ fun WindowStatusDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        modifier = solidDialogModifier(shape = RoundedCornerShape(24.dp)),
+        modifier = Modifier.solidDialogModifier(shape = RoundedCornerShape(24.dp)),
         containerColor = MaterialTheme.colorScheme.surface,
         tonalElevation = 0.dp,
         shape = RoundedCornerShape(24.dp),
@@ -6431,12 +6425,12 @@ private fun QuickVehicleActions(
                         } else if (command.name == "batteryPreheat") {
                             val isPreheating = status?.batteryPreheatEnabled == true
                             val preheatLabel = if (isPreheating) "预热中" else "电池预热"
-                            val preheatActiveColor = Color(0xFFFF9500)
+                            val preheatActiveColor = MaterialTheme.statusGood
                             QuickVehicleButton(
                                 label = preheatLabel,
                                 iconRes = command.iconRes,
-                                warning = isPreheating,
-                                inProgress = activeControlCommand == "batteryPreheat" || activeControlCommand == "batteryPreheatOff",
+                                warning = false,
+                                inProgress = cmdInProgress,
                                 isSensitive = false,
                                 isHeroDark = isHeroDark,
                                 iconTint = if (isPreheating) preheatActiveColor else normalActionContentColor,
@@ -6447,21 +6441,30 @@ private fun QuickVehicleActions(
                                             if (isPreheating) {
                                                 onControl("batteryPreheatOff")
                                             } else {
-                                                val minTempNumber = status?.minBatteryTemp
-                                                    ?.replace("°C", "", ignoreCase = true)
-                                                    ?.trim()
-                                                    ?.toDoubleOrNull()
-                                                val rawSoc = status?.soc?.trim()?.toIntOrNull()
-                                                val isChargingOrPlugged = status?.chargeState == 1 || status?.chargeGunConnected == true
+                                                val minTempC = BatteryPreheatGatePolicy.parseTemperatureC(status?.minBatteryTemp)
+                                                val socPercent = BatteryPreheatGatePolicy.parseSocPercent(
+                                                    VehicleHomeStatus.resolvedSoc(status?.preciseSoc, status?.soc)
+                                                )
+                                                val chargingOrPlugged = status?.chargeState == 1 || status?.chargeGunConnected == true
 
-                                                if (minTempNumber != null && minTempNumber > 10.0) {
-                                                    batteryPreheatWarningMessage = "当前动力电池最低温度为 ${status?.minBatteryTemp}（处于适宜工作温区）。\n\n受零跑车端 BMS 固件保护机制，仅在电芯温度低于 10℃ 时车端方可开启电池加热回路。"
-                                                    showForceBatteryPreheatButton = true
-                                                } else if (!isChargingOrPlugged && rawSoc != null && rawSoc < 20) {
-                                                    batteryPreheatWarningMessage = "当前动力电池剩余电量为 $rawSoc%（低于 20%）。\n\n为保护高压动力电池防止过放亏电，车辆未连接充电桩时限制开启电池预热。"
-                                                    showForceBatteryPreheatButton = false
-                                                } else {
-                                                    onControl("batteryPreheat")
+                                                when (
+                                                    BatteryPreheatGatePolicy.decide(
+                                                        minCellTempC = minTempC,
+                                                        socPercent = socPercent,
+                                                        chargingOrPlugged = chargingOrPlugged
+                                                    )
+                                                ) {
+                                                    BatteryPreheatGatePolicy.Decision.WARN_TEMPERATURE -> {
+                                                        batteryPreheatWarningMessage = "当前动力电池最低温度为 ${status?.minBatteryTemp}（处于适宜工作温区）。\n\n受零跑车端 BMS 固件保护机制，仅在电芯温度低于 ${BatteryPreheatGatePolicy.MIN_ACTIVATION_TEMP_C.toInt()}℃ 时车端方可开启电池加热回路。"
+                                                        showForceBatteryPreheatButton = true
+                                                    }
+                                                    BatteryPreheatGatePolicy.Decision.BLOCK_LOW_SOC -> {
+                                                        batteryPreheatWarningMessage = "当前动力电池剩余电量为 $socPercent%（低于 ${BatteryPreheatGatePolicy.MIN_SOC_PERCENT}%）。\n\n为保护高压动力电池防止过放亏电，车辆未连接充电桩时限制开启电池预热。"
+                                                        showForceBatteryPreheatButton = false
+                                                    }
+                                                    BatteryPreheatGatePolicy.Decision.ALLOW -> {
+                                                        onControl("batteryPreheat")
+                                                    }
                                                 }
                                             }
                                         }
@@ -6781,7 +6784,7 @@ private fun QuickVehicleActions(
             onDismissRequest = {
                 editing = false
             },
-            modifier = solidDialogModifier(),
+            modifier = Modifier.solidDialogModifier(),
             containerColor = MaterialTheme.colorScheme.surface,
             tonalElevation = 0.dp,
             shape = RoundedCornerShape(24.dp),
@@ -6829,7 +6832,7 @@ private fun QuickVehicleActions(
                 batteryPreheatWarningMessage = null
                 showForceBatteryPreheatButton = false
             },
-            modifier = solidDialogModifier(),
+            modifier = Modifier.solidDialogModifier(),
             containerColor = MaterialTheme.colorScheme.surface,
             tonalElevation = 0.dp,
             shape = RoundedCornerShape(24.dp),
@@ -7567,37 +7570,6 @@ private fun TopDownCarModel(
     }
 }
 
-@Composable
-fun HomeTireCell(position: String, tire: TireStatus?, modifier: Modifier = Modifier) {
-    val warning = tire?.warning == true
-    val cellBorder = glassInsetBorder(warning)
-    Surface(
-        modifier = modifier,
-        shape = RoundedCornerShape(12.dp),
-        color = if (warning) MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.30f) else MaterialTheme.glassInsetSurface,
-        border = cellBorder
-    ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text(
-                position,
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.Normal,
-                color = if (warning) MaterialTheme.colorScheme.error.copy(alpha = 0.85f) else MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(Modifier.height(2.dp))
-            Text(
-                tire?.pressure ?: "--kPa",
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = if (warning) FontWeight.Bold else FontWeight.SemiBold,
-                color = if (warning) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
-                maxLines = 1
-            )
-        }
-    }
-}
 
 @Composable
 fun VehicleStatusCard(
@@ -8296,7 +8268,7 @@ private fun ParkingDetailDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        modifier = solidDialogModifier(),
+        modifier = Modifier.solidDialogModifier(),
         containerColor = MaterialTheme.colorScheme.surface,
         tonalElevation = 0.dp,
         shape = RoundedCornerShape(24.dp),
@@ -9840,12 +9812,16 @@ fun ClimateControlBottomSheet(
     onControl: (String) -> Unit,
     onApplyClimateSettings: (AirConditioningCommand) -> Unit,
     controlFeedback: ControlFeedback? = null,
-    onDismissControlFeedback: () -> Unit = {}
+    onDismissControlFeedback: () -> Unit = {},
+    scheduledAcPlan: ScheduledAcPlan = ScheduledAcPlan(),
+    onApplyScheduledAc: (ScheduledAcPlan) -> Unit = {},
+    onLoadScheduledAc: suspend () -> ScheduledAcPlan = { error("预约查询不可用") }
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val coroutineScope = rememberCoroutineScope()
     val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
     var showExtendedControls by remember { mutableStateOf(false) }
+    var showScheduledAcSheet by remember { mutableStateOf(false) }
     // 解除全局 busy 锁定：只要有车辆数据，面板按键随时响应触控，实现极致跟手性
     val actionsEnabled = status != null
     val fanRange = hvacCapability.effectiveUiFanRange()
@@ -10092,21 +10068,36 @@ fun ClimateControlBottomSheet(
                 }
             }
 
-            // 1.5 场景化「一键智能舒享」建议芯片 (烈日暴晒/雨雪潮湿/严寒升温)
-            val smartSuggestion = remember(status?.indoorTemp, liveWeather, isAcOn, optimisticPresetName) {
+            // 场景提醒同时匹配乐观状态与遥测预设。
+            val smartSuggestion = remember(status?.indoorTemp, liveWeather, isAcOn, activePresetName) {
                 com.leapauto.app.weather.ClimateSmartRecommendationPolicy.resolve(
                     indoorTempStr = status?.indoorTemp,
                     weather = liveWeather,
                     isAcOn = isAcOn,
-                    activePreset = optimisticPresetName
+                    activePreset = activePresetName
                 )
             }
             if (smartSuggestion != null) {
+                val suggestionColor = when (smartSuggestion.preset) {
+                    ClimatePresetAction.QUICK_COOL -> MaterialTheme.colorScheme.primary
+                    ClimatePresetAction.QUICK_HEAT -> MaterialTheme.statusWarn
+                    else -> MaterialTheme.colorScheme.secondary
+                }
+                val suggestionContentColor = androidx.compose.ui.graphics.lerp(
+                    suggestionColor,
+                    MaterialTheme.colorScheme.onSurfaceVariant,
+                    if (LocalAppDarkTheme.current) 0.65f else 0.75f
+                )
                 Surface(
                     shape = RoundedCornerShape(14.dp),
-                    color = smartSuggestion.accentColor.copy(alpha = 0.08f),
-                    border = BorderStroke(0.5.dp, smartSuggestion.accentColor.copy(alpha = 0.35f)),
-                    modifier = Modifier.fillMaxWidth()
+                    color = Color.Transparent,
+                    border = glassCardBorder(),
+                    shadowElevation = 0.dp,
+                    modifier = Modifier.fillMaxWidth().frostedGlassCard(
+                        shape = RoundedCornerShape(14.dp),
+                        auraColor = suggestionColor.copy(alpha = 0.08f),
+                        auraRadiusRatio = 1.2f
+                    )
                 ) {
                     Row(
                         modifier = Modifier
@@ -10123,46 +10114,54 @@ fun ClimateControlBottomSheet(
                             Icon(
                                 painter = painterResource(smartSuggestion.iconRes),
                                 contentDescription = null,
-                                tint = smartSuggestion.accentColor,
+                                tint = suggestionContentColor,
                                 modifier = Modifier.size(18.dp)
                             )
                             Column {
                                 Text(
                                     text = smartSuggestion.title,
-                                    style = MaterialTheme.typography.labelMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = smartSuggestion.accentColor
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Normal,
+                                    color = suggestionContentColor
                                 )
                                 Text(
                                     text = smartSuggestion.description,
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    maxLines = 1
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Normal,
+                                    color = suggestionContentColor
                                 )
                             }
                         }
                         Spacer(Modifier.width(6.dp))
                         Surface(
                             shape = RoundedCornerShape(8.dp),
-                            color = smartSuggestion.accentColor.copy(alpha = 0.15f),
-                            border = BorderStroke(0.8.dp, smartSuggestion.accentColor.copy(alpha = 0.50f)),
+                            color = suggestionColor.copy(alpha = 0.05f),
+                            border = glassCardBorder(),
                             modifier = Modifier
                                 .clip(RoundedCornerShape(8.dp))
                                 .clickable {
                                     haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
                                     userLastActionEpochMs = System.currentTimeMillis()
                                     optimisticAcSwitch = true
-                                    optimisticPresetName = smartSuggestion.command
+                                    optimisticPresetName = smartSuggestion.preset.name
                                     onControl(smartSuggestion.command)
                                 }
                         ) {
-                            Text(
-                                text = smartSuggestion.actionLabel,
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = smartSuggestion.accentColor,
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.5.dp)
-                            )
+                            Box(
+                                modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+                                    .padding(horizontal = 10.dp, vertical = 4.5.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = smartSuggestion.actionLabel,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Normal,
+                                    color = suggestionContentColor
+                                )
+                            }
                         }
                     }
                 }
@@ -10364,6 +10363,47 @@ fun ClimateControlBottomSheet(
                 )
             }
 
+            // 3.1 情景控制：快速除味 / 定时空调
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                val isDeodorizeActive = activePresetName == ClimatePresetAction.DEODORIZE.name
+                QuickClimateCircleAction(
+                    icon = R.drawable.ic_airflow,
+                    label = "快速除味",
+                    isActive = isDeodorizeActive,
+                    activeColor = MaterialTheme.statusGood,
+                    enabled = actionsEnabled,
+                    onClick = {
+                        haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                        userLastActionEpochMs = System.currentTimeMillis()
+                        optimisticAcSwitch = true
+                        optimisticPresetName = ClimatePresetAction.DEODORIZE.name
+                        editedDefogging = false
+                        editedOutletName = AirOutlet.ALL.name
+                        editedCircle = AirCircle.OUTER
+                        editedWindLevel = 7.coerceIn(fanRange)
+                        editedTemperature = 24
+                        onControl("deodorize")
+                    },
+                    modifier = Modifier.weight(1f)
+                )
+
+                QuickClimateCircleAction(
+                    icon = R.drawable.ic_phosphor_alarm,
+                    label = "定时空调",
+                    isActive = scheduledAcPlan.enabled,
+                    activeColor = MaterialTheme.colorScheme.primary,
+                    enabled = actionsEnabled,
+                    onClick = {
+                        haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                        showScheduledAcSheet = true
+                    },
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
             // 4. 完整空调设置界面 (风量滑块 / 出风方向 / 座椅舒适度)
             Column(
                 modifier = Modifier.fillMaxWidth(),
@@ -10519,6 +10559,20 @@ fun ClimateControlBottomSheet(
     }
 }
 }
+
+    if (showScheduledAcSheet) {
+        ScheduledAcSheet(
+            onDismissRequest = { showScheduledAcSheet = false },
+            initialPlan = scheduledAcPlan,
+            onLoad = onLoadScheduledAc,
+            temperatureRange = hvacCapability.temperatureMinC..hvacCapability.temperatureMaxC,
+            fanRange = fanRange,
+            onConfirm = { plan ->
+                showScheduledAcSheet = false
+                onApplyScheduledAc(plan)
+            }
+        )
+    }
 }
 
 @Composable
@@ -10595,7 +10649,10 @@ fun ClimateControlContent(
     onDismissControlFeedback: () -> Unit,
     onRefresh: () -> Unit,
     onControl: (String) -> Unit,
-    onApplyClimateSettings: (AirConditioningCommand) -> Unit
+    onApplyClimateSettings: (AirConditioningCommand) -> Unit,
+    scheduledAcPlan: ScheduledAcPlan = ScheduledAcPlan(),
+    onApplyScheduledAc: (ScheduledAcPlan) -> Unit = {},
+    onLoadScheduledAc: suspend () -> ScheduledAcPlan = { error("预约查询不可用") }
 ) {
     ClimateControlBottomSheet(
         onDismissRequest = onDismissRequest,
@@ -10606,7 +10663,10 @@ fun ClimateControlContent(
         onControl = onControl,
         onApplyClimateSettings = onApplyClimateSettings,
         controlFeedback = controlFeedback,
-        onDismissControlFeedback = onDismissControlFeedback
+        onDismissControlFeedback = onDismissControlFeedback,
+        scheduledAcPlan = scheduledAcPlan,
+        onApplyScheduledAc = onApplyScheduledAc,
+        onLoadScheduledAc = onLoadScheduledAc
     )
 }
 
@@ -11141,59 +11201,6 @@ fun ThinClimateSlider(
     }
 }
 
-@Composable
-fun ClimateSegmentedSetting(
-    title: String,
-    options: List<Pair<String, String>>,
-    selected: String,
-    enabled: Boolean,
-    onSelected: (String) -> Unit
-) {
-    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(title, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-            options.forEachIndexed { index, option ->
-                val presetIcon = when (option.first) {
-                    ClimatePresetAction.QUICK_COOL.name -> R.drawable.ic_phosphor_snowflake
-                    ClimatePresetAction.WINDSHIELD_DEFROST.name -> R.drawable.ic_windshield_defrost
-                    ClimatePresetAction.QUICK_HEAT.name -> R.drawable.ic_phosphor_sun
-                    ClimatePresetAction.DEODORIZE.name -> R.drawable.ic_phosphor_fan
-                    else -> null
-                }
-                SegmentedButton(
-                    shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size),
-                    onClick = { onSelected(option.first) },
-                    selected = selected == option.first,
-                    enabled = enabled,
-                    colors = SegmentedButtonDefaults.colors(
-                        activeContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
-                        activeContentColor = MaterialTheme.colorScheme.primary,
-                        activeBorderColor = MaterialTheme.colorScheme.primary,
-                        inactiveContainerColor = MaterialTheme.colorScheme.surface,
-                        inactiveContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        inactiveBorderColor = MaterialTheme.colorScheme.outlineVariant
-                    ),
-                    icon = {},
-                    label = {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(3.dp)
-                        ) {
-                            if (presetIcon != null) {
-                                Icon(
-                                    painter = painterResource(presetIcon),
-                                    contentDescription = null,
-                                    modifier = Modifier.size(12.dp)
-                                )
-                            }
-                            Text(option.second, style = MaterialTheme.typography.labelSmall, maxLines = 1, softWrap = false)
-                        }
-                    }
-                )
-            }
-        }
-    }
-}
 
 fun climateWholeNumber(value: String?): Int? = value
     ?.trim()
@@ -11204,16 +11211,7 @@ fun climateWholeNumber(value: String?): Int? = value
     ?.takeIf { it.scale() <= 0 }
     ?.let { runCatching { it.intValueExact() }.getOrNull() }
 
-fun displayClimateFanLevel(value: String?): String =
-    climateWholeNumber(value)?.takeIf { it in 1..7 }?.let { "$it 档" } ?: "--"
 
-@Composable
-fun ClimateStatusItem(label: String, value: String, modifier: Modifier = Modifier) {
-    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(3.dp)) {
-        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, maxLines = 2)
-    }
-}
 
 fun displayClimateTemperature(target: AcTemperatureTarget): String = "${target.value} °C"
 
@@ -11243,142 +11241,8 @@ fun energyCompositionColor(label: String, index: Int): Color = when (label.trim(
 fun Double.formatEnergyNumber(): String =
     if (this % 1.0 == 0.0) toInt().toString() else String.format(Locale.US, "%.1f", this)
 
-@Composable
-fun PowerPagerAutoPlayCard(enabled: Boolean, onEnabledChange: (Boolean) -> Unit) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        color = MaterialTheme.glassSurface,
-        shadowElevation = 0.dp
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Column(Modifier.weight(1f)) {
-                Text(
-                    "轮播卡片自动播放",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Text(
-                    "开启后首页能耗与电量卡片将自动轮播",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            ClimateToggle(
-                checked = enabled,
-                onCheckedChange = onEnabledChange,
-                contentDescription = "轮播卡片自动播放",
-                stateDescription = if (enabled) "已开启" else "已关闭"
-            )
-        }
-    }
-}
 
-@Composable
-fun SummaryMetric(label: String, value: String, modifier: Modifier = Modifier) {
-    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(value, style = MaterialTheme.typography.titleMedium.energyStyle(), fontWeight = FontWeight.Bold, maxLines = 1)
-    }
-}
 
-@Composable
-fun PinCard(
-    pinSaved: Boolean,
-    pin: String,
-    onPinChange: (String) -> Unit,
-    onSavePin: () -> Unit,
-    initialSetupInProgress: Boolean,
-    onCancelInitialSetup: () -> Unit
-) {
-    var editingPin by rememberSaveable(pinSaved) { mutableStateOf(!pinSaved || initialSetupInProgress) }
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        color = MaterialTheme.glassSurface,
-        shadowElevation = 0.dp
-    ) {
-        Column(
-            modifier = Modifier.padding(18.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        "操控密码",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Text(
-                        if (pinSaved) "已设置（用于控车指令加密）" else "未设置（用于控车指令加密）",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                if (pinSaved && !editingPin) {
-                    TextButton(onClick = { editingPin = true }) {
-                        Text("修改")
-                    }
-                }
-            }
-            if (editingPin) {
-                OutlinedTextField(
-                    value = pin,
-                    onValueChange = onPinChange,
-                    label = { Text("4 位数字操控密码") },
-                    visualTransformation = PasswordVisualTransformation(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp)
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    if (pinSaved || initialSetupInProgress) {
-                        OutlinedButton(
-                            onClick = {
-                                if (initialSetupInProgress) {
-                                    onCancelInitialSetup()
-                                } else {
-                                    editingPin = false
-                                }
-                            },
-                            modifier = Modifier.weight(1f).height(48.dp),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = neutralOutlinedButtonColors(),
-                            border = neutralButtonBorder()
-                        ) {
-                            Text(if (initialSetupInProgress) "取消设置" else "取消")
-                        }
-                    }
-                    Button(
-                        onClick = {
-                            onSavePin()
-                            editingPin = false
-                        },
-                        modifier = Modifier.weight(1f).height(48.dp),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = neutralButtonColors(),
-                        enabled = pin.matches(Regex("\\d{4}"))
-                    ) {
-                        Text(if (pinSaved) "更新密码" else "保存密码")
-                    }
-                }
-            }
-        }
-    }
-}
 
 @Composable
 fun neutralButtonColors() = ButtonDefaults.buttonColors(
@@ -11389,11 +11253,6 @@ fun neutralButtonColors() = ButtonDefaults.buttonColors(
 @Composable
 fun neutralOutlinedButtonColors() = ButtonDefaults.outlinedButtonColors(
     containerColor = MaterialTheme.colorScheme.surface,
-    contentColor = MaterialTheme.colorScheme.onSurfaceVariant
-)
-
-@Composable
-fun neutralTextButtonColors() = ButtonDefaults.textButtonColors(
     contentColor = MaterialTheme.colorScheme.onSurfaceVariant
 )
 

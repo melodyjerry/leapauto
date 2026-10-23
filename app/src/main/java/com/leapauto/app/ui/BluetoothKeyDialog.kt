@@ -62,39 +62,8 @@ import com.leapauto.app.bluetooth.BleLockAction
 import com.leapauto.app.bluetooth.BleNearbyDevice
 import com.leapauto.app.bluetooth.BlePassiveConfiguration
 import com.leapauto.app.bluetooth.BleVehicleMetadata
-import com.leapauto.app.ui.theme.LocalAppDarkTheme
 import com.leapauto.app.ui.theme.statusGood
 
-@Composable
-internal fun BluetoothKeyEntry(onClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        Icon(
-            painterResource(R.drawable.ic_phosphor_key),
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.size(24.dp)
-        )
-        Text(
-            "蓝牙数字钥匙",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.weight(1f)
-        )
-        Icon(
-            painterResource(R.drawable.ic_phosphor_caret_right),
-            contentDescription = null,
-            modifier = Modifier.size(16.dp),
-            tint = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    }
-}
 
 @Composable
 fun BluetoothKeyDialog(
@@ -847,7 +816,7 @@ fun BluetoothActionConfirmation(
     val label = if (action == BleLockAction.LOCK) "上锁" else "解锁"
     AlertDialog(
         onDismissRequest = onDismiss,
-        modifier = solidDialogModifier(),
+        modifier = Modifier.solidDialogModifier(),
         containerColor = MaterialTheme.colorScheme.surface,
         tonalElevation = 0.dp,
         shape = RoundedCornerShape(24.dp),

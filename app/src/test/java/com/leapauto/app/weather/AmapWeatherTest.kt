@@ -89,9 +89,9 @@ class AmapWeatherTest {
             isAcOn = false
         )
         assertNotNull(suggestion)
-        assertEquals("rapidCooling", suggestion!!.command)
+        assertEquals("quickCool", suggestion!!.command)
         assertEquals("极速降温", suggestion.actionLabel)
-        assertTrue(suggestion.title.contains("烈日暴晒"))
+        assertTrue(suggestion.title.contains("车内偏热"))
     }
 
     @Test
@@ -108,7 +108,7 @@ class AmapWeatherTest {
             isAcOn = true
         )
         assertNotNull(suggestion)
-        assertEquals("windshieldDefrost", suggestion!!.command)
+        assertEquals("defrost", suggestion!!.command)
         assertEquals("一键除雾", suggestion.actionLabel)
         assertTrue(suggestion.title.contains("雨雪天气"))
     }
@@ -127,9 +127,9 @@ class AmapWeatherTest {
             isAcOn = false
         )
         assertNotNull(suggestion)
-        assertEquals("rapidHeating", suggestion!!.command)
+        assertEquals("quickHeat", suggestion!!.command)
         assertEquals("舒适升温", suggestion.actionLabel)
-        assertTrue(suggestion.title.contains("室外寒冷"))
+        assertTrue(suggestion.title.contains("车内偏冷"))
     }
 
     @Test

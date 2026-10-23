@@ -9,7 +9,6 @@ import android.os.Looper
 import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
 import android.util.Log
-import androidx.annotation.RequiresApi
 import com.leapauto.app.ControlService
 import com.leapauto.app.R
 import com.leapauto.app.SessionStore
@@ -18,7 +17,6 @@ import com.leapauto.app.SessionStore
  * 下拉控制中心快捷磁贴：车锁（上锁 / 解锁）。
  * 具备锁闭状态自适应反馈：已上锁时点击安全解锁，未锁时点击一键上锁。
  */
-@RequiresApi(Build.VERSION_CODES.N)
 class LockToggleTileService : TileService() {
 
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -108,11 +106,7 @@ class LockToggleTileService : TileService() {
             putExtra(ControlService.EXTRA_COMMAND, command)
         }
         try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                startForegroundService(intent)
-            } else {
-                startService(intent)
-            }
+            startForegroundService(intent)
         } catch (e: Exception) {
             Log.e(TAG, "启动门锁服务异常: ${e.message}")
         }

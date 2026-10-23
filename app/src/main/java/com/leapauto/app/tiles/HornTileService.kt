@@ -1,7 +1,6 @@
 package com.leapauto.app.tiles
 
 import android.app.PendingIntent
-import android.content.Context
 import android.content.Intent
 import android.graphics.drawable.Icon
 import android.os.Build
@@ -10,7 +9,6 @@ import android.os.Looper
 import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
 import android.util.Log
-import androidx.annotation.RequiresApi
 import com.leapauto.app.ControlService
 import com.leapauto.app.R
 import com.leapauto.app.SessionStore
@@ -19,7 +17,6 @@ import com.leapauto.app.SessionStore
  * 下拉控制中心快捷磁贴：寻车（鸣笛闪灯）。
  * 具备极高实用价值：支持锁屏状态下免解锁直接盲按，快速在地库寻找车辆。
  */
-@RequiresApi(Build.VERSION_CODES.N)
 class HornTileService : TileService() {
 
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -74,11 +71,7 @@ class HornTileService : TileService() {
             putExtra(ControlService.EXTRA_COMMAND, "horn")
         }
         try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                startForegroundService(intent)
-            } else {
-                startService(intent)
-            }
+            startForegroundService(intent)
         } catch (e: Exception) {
             Log.e(TAG, "启动寻车服务异常: ${e.message}")
         }

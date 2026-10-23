@@ -15,12 +15,10 @@ import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
 import com.leapauto.app.CarModel3DManager
-import com.leapauto.app.CompactControlWidget
 import com.leapauto.app.ControlWidget
 import com.leapauto.app.ThemeManager
 import com.leapauto.app.TrunkState
